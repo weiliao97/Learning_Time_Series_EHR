@@ -114,26 +114,6 @@ class TemporalConvStatic(nn.Module):
         nn.Dropout(0.2),
         nn.Linear(128, 1),
         )
-        # self.composite = nn.Sequential(
-        # nn.Linear(128+num_channels[-1], 1024),
-        # # nn.BatchNorm1d(24),
-        # nn.ReLU(),
-        # nn.Dropout(0.2),
-        # nn.Linear(1024, 512),
-        # # nn.BatchNorm1d(24),
-        # nn.ReLU(),
-        # nn.Dropout(0.2),
-        # nn.Linear(512, 256),
-        # # nn.BatchNorm1d(24),
-        # nn.ReLU(),
-        # nn.Dropout(0.2),
-        # nn.Linear(256, 128),
-        # # nn.BatchNorm1d(24),
-        # nn.ReLU(),
-        # nn.Dropout(0.2),
-        # nn.Linear(128, 1)
-        # )
-        # self.linear = nn.Linear(1024+128, 1)
 
     def forward(self, x, s):
         # x (17, 200, 215)
@@ -560,8 +540,7 @@ class TemporalConvStaticI(nn.Module):
         
         return x 
 
-# Transformer models 
-
+# Transformer models
 class PositionalEncoding(nn.Module):
     "Implement the PE function."
     def __init__(self, d_model, dropout, max_len=5000):
