@@ -1,143 +1,52 @@
-from torch.autograd import Variable
 import pandas as pd
-import random
 import torch
-import numpy as np
-import torch.nn.functional as F
 import torch.nn as nn
-import tqdm
+import torch.nn.functional as F
+import numpy as np
 import argparse
-import sys
 import os
 import json
 from datetime import date
-
 today = date.today()
 date = today.strftime("%m%d")
 import importlib
 import models
 import prepare_data
-# import make_optimizer
 import utils
-
-# import loss_fn
 importlib.reload(models)
-# importlib.reload(make_optimizer)
 importlib.reload(prepare_data)
 importlib.reload(utils)
-# importlib.reload(loss_fn)
-# import neptune.new as neptune
 from sklearn.model_selection import KFold
-
 kf = KFold(n_splits=10, random_state=None, shuffle=False)
-
 mse_loss = nn.MSELoss()
-
-
-def calculate_l1(model):
-    L1_reg = torch.tensor(0., requires_grad=True)
-    for name, param in model.static.named_parameters():
-        if 'weight' in name:
-            L1_reg = L1_reg + torch.norm(param, 1)
-    for name, param in model.static1.named_parameters():
-        if 'weight' in name:
-            L1_reg = L1_reg + torch.norm(param, 1)
-    for name, param in model.static2.named_parameters():
-        if 'weight' in name:
-            L1_reg = L1_reg + torch.norm(param, 1)
-    for name, param in model.static3.named_parameters():
-        if 'weight' in name:
-            L1_reg = L1_reg + torch.norm(param, 1)
-    for name, param in model.s_composite.named_parameters():
-        if 'weight' in name:
-            L1_reg = L1_reg + torch.norm(param, 1)
-    return L1_reg
-
-
-def creat_checkpoint_folder(target_path, target_file, data):
-    if not os.path.exists(target_path):
-        try:
-            os.makedirs(target_path)
-        except Exception as e:
-            print(e)
-            raise
-    with open(os.path.join(target_path, target_file), 'w') as f:
-        json.dump(data, f)
-
-def mse_maskloss(output, target, mask):
-    loss = [mse_loss(output[i][mask[i] == 0], target[i][mask[i] == 0]) for i in range(len(output))]
-    return torch.mean(torch.stack(loss))
-
-
-def simulate_data(inputs):
-    s_inputs = [np.random.rand(i.shape[0], i.shape[1]) for i in inputs]
-    return s_inputs
-
-
-def crop_data_target(vital, target_dict, static_dict, mode):
-    length = [i.shape[-1] for i in vital]
-    train_filter = [vital[i][:, :-24] for i, m in enumerate(length) if m > 24]
-    all_train_id = list(target_dict[mode].keys())
-    stayids = [all_train_id[i] for i, m in enumerate(length) if m > 24]
-    sofa_tail = [target_dict[mode][j][24:] / 15 for j in stayids]
-    sname = 'static_' + mode
-    static_data = [static_dict[sname][static_dict[sname].index.get_level_values('stay_id') == j].values for j in
-                   stayids]
-    # remove hospital mort flag and los
-    # squeese from (1, 25) to (25, )
-    static_data = [np.squeeze(np.concatenate((s[:, :2], s[:, 4:]), axis=1)) for s in static_data]
-    return train_filter, static_data, sofa_tail, stayids
-
-
-def filter_sepsis(vital, static, sofa, ids):
-    id_df = pd.read_csv('/content/drive/My Drive/ColabNotebooks/MIMIC/TCN/mimic_sepsis3.csv')
-    sepsis3_id = id_df['stay_id'].values  # 1d array
-    index_dict = dict((value, idx) for idx, value in enumerate(ids))
-    ind = [index_dict[x] for x in sepsis3_id if x in index_dict.keys()]
-    vital_sepsis = [vital[i] for i in ind]
-    static_sepsis = [static[i] for i in ind]
-    sofa_sepsis = [sofa[i] for i in ind]
-    return vital_sepsis, static_sepsis, sofa_sepsis, [ids[i] for i in ind]
-
-
-def slice_data(trainval_data, index):
-    return [trainval_data[i] for i in index]
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Parser for Tranformer models")
     # data
     parser.add_argument("--dataset_path", type=str, help="path to the dataset")
-    parser.add_argument("--database", type=str, default='mimic', choices=['mimic', 'eicu'])
-    parser.add_argument("patient_subset", type=str, )
+    parser.add_argument("--database", type=str, default='mimic' choices=['mimic', 'eicu'])
     parser.add_argument("--bucket_size", type=int, default=300, help="path to the dataset")
-    parser.add_argument("--project_name", type=str, default='TCN', help="Neptune data logging")
-    parser.add_argument("--use_vital_only", action='store_true', default=False, help="Whethe only use vital features")
     parser.add_argument("--use_sepsis3", action='store_false', default=True, help="Whethe only use sepsis3 subset")
-
-    # model_name fc means only use fc layer to work on previous transformer outputs
     parser.add_argument("--model_name", type=str, default='TCN', choices=['TCN', 'RNN', 'Transformer'])
     # how to fuse with transformer models and LSTM models is still pending
     parser.add_argument("--static_fusion", type=str, default='med',
                         choices=['no_static', 'early', 'med', 'late', 'all', 'inside'])
-
     # model parameters
     # TCN
     parser.add_argument("--kernel_size", type=int, default=3, help="Dimension of the model")
     parser.add_argument("--dropout", type=float, default=0.2, help="Model dropout")
     parser.add_argument("--reluslope", type=float, default=0.1, help="Relu slope in the fc model")
-    # parser.add_argument('--num_channels', nargs='+', help='<Required> Set flag')
-    # parser.add_argument("--use_encode", action = 'store_true', help="Dimension of the feedforward model")
+    parser.add_argument('--num_channels', nargs='+', help='<Required> Set flag')
 
     # LSTM
     parser.add_argument("--rnn_type", type=str, default='lstm', choices=['rnn', 'lstm', 'gru'])
     parser.add_argument("--hidden_dim", type=int, default=256, help="RNN hidden dim")
     parser.add_argument("--layer_dim", type=int, default=3, help="RNN layer dim")
-    parser.add_argument("--idrop", type=float, default=0, help="RNN drop out in the very beginning")
 
     # transformer
-    parser.add_argument('--warmup', action='store_true', help="whether use learning rate warm up")
+    parser.add_argument('--warmup', action='store_true', deafult=False, help="whether use learning rate warm up")
     parser.add_argument('--lr_factor', type=int, default=0.1, help="warmup_learning rate factor")
     parser.add_argument('--lr_steps', type=int, default=2000, help="warmup_learning warm up steps")
     parser.add_argument("--d_model", type=int, default=256, help="Dimension of the model")
@@ -152,14 +61,9 @@ if __name__ == "__main__":
     parser.add_argument("--bs", type=int, default=16, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")  # could be overwritten by warm up
 
-    # keep training
-    parser.add_argument('--resume_from', type=bool, default=False, required=False,
-                        help="whether retrain from a certain old model")
-    parser.add_argument('--old_dict', type=str)
-
     parser.add_argument("--checkpoint", type=str, default='med_fusion_ks3', help=" name of checkpoint model")
     # Parse and return arguments
-    args = parser.parse_known_args()[0]
+    args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
     # log run
@@ -200,8 +104,8 @@ if __name__ == "__main__":
         '/content/drive/MyDrive/ColabNotebooks/MIMIC/Extract/MEEP/Extracted_sep_2022/0910/MIMIC_target_0922_2022.npy', \
         allow_pickle=True).item()
 
-    train_head, train_static, train_sofa, train_id = crop_data_target(train_vital, mimic_target, mimic_static, 'train')
-    dev_head, dev_static, dev_sofa, dev_id = crop_data_target(dev_vital, mimic_target, mimic_static, 'dev')
+    train_head, train_static, train_sofa, train_id = utils.crop_data_target(train_vital, mimic_target, mimic_static, 'train')
+    dev_head, dev_static, dev_sofa, dev_id = utils.crop_data_target(dev_vital, mimic_target, mimic_static, 'dev')
     test_head, test_static, test_sofa, test_id = crop_data_target(test_vital, mimic_target, mimic_static, 'test')
 
     if args.use_sepsis3 == True:
@@ -209,22 +113,8 @@ if __name__ == "__main__":
         dev_head, dev_static, dev_sofa, dev_id = filter_sepsis(dev_head, dev_static, dev_sofa, dev_id)
         test_head, test_static, test_sofa, test_id = filter_sepsis(test_head, test_static, test_sofa, test_id)
 
-    if args.use_vital_only == True:
-        train_head = [tr[:184, :] for tr in train_head]
-        dev_head = [de[:184, :] for de in dev_head]
-        test_head = [te[:184, :] for te in test_head]
-        input_dim = 184
-    else:
-        input_dim = 200
+    input_dim =train_head[0].shape[0]
 
-    if args.resume_from == True:
-        if args.old_dict is not None:
-            print("Loading weights from %s" % args.old_dict)
-            model.load_state_dict(torch.load(args.old_dict + ".pt"))
-            _, _, _, best_loss = utils.get_eval_results(model, test_dataloader)
-            print('Best loss from the trained model is: {:.4f}'.format(best_loss))
-        else:
-            print('Keep training')
 
     else:
         # creat model default model is TCN to explore different kinds of fusion
