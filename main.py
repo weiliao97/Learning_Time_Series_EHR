@@ -1,11 +1,9 @@
-import pandas as pd
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 import argparse
-import os
-import json
 from datetime import date
 today = date.today()
 date = today.strftime("%m%d")
@@ -25,14 +23,29 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Parser for Tranformer models")
     # data
-    parser.add_argument("--dataset_path", type=str, help="path to the dataset")
     parser.add_argument("--database", type=str, default='mimic', choices=['mimic', 'eicu'])
-    parser.add_argument("--bucket_size", type=int, default=300, help="path to the dataset")
+    # datapath 
+    parser.add_argument("--mimic_vital", type=str, default='data')
+    parser.add_argument("--mimic_vital", type=str, default='data')
+    parser.add_argument("--mimic_vital", type=str, default='data')
+    parser.add_argument("--mimic_vital", type=str, default='data')
+    parser.add_argument("--mimic_vital", type=str, default='data')
+    parser.add_argument("--mimic_vital", type=str, default='data')
+    # data grouping and cohort 
+    parser.add_argument("--bucket_size", type=int, default=300, help="bucket size to group different length of time-series data")
     parser.add_argument("--use_sepsis3", action='store_false', default=True, help="Whethe only use sepsis3 subset")
+    
+    # modeling
     parser.add_argument("--model_name", type=str, default='TCN', choices=['TCN', 'RNN', 'Transformer'])
     # how to fuse with transformer models and LSTM models is still pending
     parser.add_argument("--static_fusion", type=str, default='med',
                         choices=['no_static', 'early', 'med', 'late', 'all', 'inside'])
+    #  med requires 
+
+    # late requires
+    # all requires
+    # inside requires 
+
     # model parameters
     # TCN
     parser.add_argument("--kernel_size", type=int, default=3, help="Dimension of the model")
@@ -57,14 +70,13 @@ if __name__ == "__main__":
     # learning parameters
     parser.add_argument("--epochs", type=int, default=150, help="Number of training epochs")
     parser.add_argument("--data_batching", type=str, default='close', choices=['same', 'close', 'random'],
-                        help='How to batch data')
+                        help='How to batch data, same: same length, close: close-enough length, random: random length')
     parser.add_argument("--bs", type=int, default=16, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")  # could be overwritten by warm up
 
     parser.add_argument("--checkpoint", type=str, default='med_fusion_ks3', help=" name of checkpoint model")
     # Parse and return arguments
     args = parser.parse_args()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
     # log run
     arg_dict = vars(args)
