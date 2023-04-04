@@ -550,7 +550,9 @@ class TemporalConvStaticI(nn.Module):
 
 # Transformer models
 class PositionalEncoding(nn.Module):
+
     "Implement the PE function."
+    
     def __init__(self, d_model, dropout, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -622,7 +624,9 @@ class Trans_encoder(nn.Module):
 
 # RNN 
 class LockedDropout(nn.Module):
-    # ...
+    '''
+    Dropout that is consistent on the sequence dimension.
+    '''
     def forward(self, x, dropout=0.5):
         if not self.training:
             return x
@@ -633,6 +637,9 @@ class LockedDropout(nn.Module):
         return mask * x
 
 class RecurrentModel(nn.Module):
+    '''
+    Recurrent model for time series data.
+    '''
     def __init__(self, cell='RNN', input_dim=200, hidden_dim=10, layer_dim=3, output_dim=2, dropout_prob=0.2, idrop=0, activation='tanh'):
         super(RecurrentModel, self).__init__()
 
