@@ -24,12 +24,9 @@ if __name__ == "__main__":
     # data
     parser.add_argument("--database", type=str, default='mimic', choices=['mimic', 'eicu'])
     # datapath 
-    parser.add_argument("--mimic_vital", type=str, default='data')
-    parser.add_argument("--mimic_vital", type=str, default='data')
-    parser.add_argument("--mimic_vital", type=str, default='data')
-    parser.add_argument("--mimic_vital", type=str, default='data')
-    parser.add_argument("--mimic_vital", type=str, default='data')
-    parser.add_argument("--mimic_vital", type=str, default='data')
+    # parser.add_argument("--td_data", type=str, help = 'path to the time-series data')
+    # parser.add_argument("--static_data", type=str, help = 'path to the static data')
+    # parser.add_argument("--sofa_data", type=str, help = 'path to the SOFA target data')
     # data grouping and cohort 
     parser.add_argument("--bucket_size", type=int, default=300, help="bucket size to group different length of time-series data")
     parser.add_argument("--use_sepsis3", action='store_false', default=True, help="Whethe only use sepsis3 subset")
@@ -134,8 +131,15 @@ if __name__ == "__main__":
         if args.model_name == 'TCN':
             model = models.TemporalConv(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
                                         kernel_size=args.kernel_size, dropout=args.dropout)
-   
-        
+        elif args.model_name == 'RNN':
+            model = models.RecurrentModel(cell=args.rnn_type, input_dim = input_dim, hidden_dim=args.hidden_dim, layer_dim=args.layer_dim, \
+                                        output_dim=1, dropout_prob=args.dropout, idrop=args.idrop)
+
+        elif args.model_name == 'Transformer':
+            model = models.Trans_encoder(feature_dim=input_dim, d_model=args.d_model, \
+                  nhead=args.n_head, d_hid=args.dim_ff_mul * args.d_model, \
+                  nlayers=args.num_enc_layer, out_dim=1, dropout=args.dropout)
+
     elif args.static_fusion == 'med':
         model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
                                             num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
@@ -160,14 +164,6 @@ if __name__ == "__main__":
                                             use_encode=arg_dict['use_encode'], encode_param=arg_dict['encode_param'],
                                             fuse_inside=arg_dict['fuse_inside'])
 
-        # elif args.model_name == 'RNN':
-        #     model = models.RecurrentModel(cell=args.rnn_type, input_dim = input_dim, hidden_dim=args.hidden_dim, layer_dim=args.layer_dim, \
-        #                                 output_dim=1, dropout_prob=args.dropout, idrop=args.idrop)
-
-        # elif args.model_name == 'Transformer':
-        #     model = models.Trans_encoder(feature_dim=input_dim, d_model=args.d_model, \
-        #           nhead=args.n_head, d_hid=args.dim_ff_mul * args.d_model, \
-        #           nlayers=args.num_enc_layer, out_dim=1, dropout=args.dropout)
 
     print('Model trainable parameters are: %d' % utils.count_parameters(model))
     torch.save(model.state_dict(), '/content/start_weights.pt')
@@ -264,7 +260,7 @@ if __name__ == "__main__":
                 # ti_data = Variable(ti.float().to(device))
                 # td_data = vitals.to(device) # (6, 182, 24)
                 # sofa = target.to(device)
-                if args.static_fusion == 'no_static'
+                if args.static_fusion == 'no_static':
                     if args.model_name == 'TCN': 
                         sofa_p = model(vitals.to(device))
                     elif args.model_name == 'RNN':
