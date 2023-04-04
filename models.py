@@ -6,7 +6,18 @@ from torch.autograd import Variable
 import math
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
+# The following implementation is from
+# @article{BaiTCN2018,
+# 	author    = {Shaojie Bai and J. Zico Kolter and Vladlen Koltun},
+# 	title     = {An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling},
+# 	journal   = {arXiv:1803.01271},
+# 	year      = {2018},
+# }
+# link : https://github.com/locuslab/TCN
 class Chomp1d(nn.Module):
+    """
+    To make sure causal convolution
+    """
     def __init__(self, chomp_size):
         super(Chomp1d, self).__init__()
         self.chomp_size = chomp_size
@@ -63,11 +74,9 @@ class TemporalConv(nn.Module):
         self.network = nn.Sequential(*layers)
         self.linear = nn.Sequential(
         nn.Linear(num_channels[-1], 128),
-        # nn.BatchNorm1d(128),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 128),
-        # nn.BatchNorm1d(128),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 1)
@@ -79,6 +88,7 @@ class TemporalConv(nn.Module):
         x = self.linear(x)
         return x
 
+# fusion at I 
 class TemporalConvStatic(nn.Module):
     def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
         super(TemporalConvStatic, self).__init__()
@@ -116,89 +126,91 @@ class TemporalConvStatic(nn.Module):
         )
 
     def forward(self, x, s):
-        # x (17, 200, 215)
+        # (17, 200, 48) --> (17, 256, 48)
         x = self.network(x)
-        # x (17, 215, 200)
+        # (17, 256, 48) --> (17, 48, 256)
         x = x.contiguous().transpose(1, 2)
-        # s (17, 41)
+        # (17, 25) --> (17, 128)
         s = self.static(s) 
-        # s (17, 215, 41)
+        # (17, 128) --> (17, 48, 128)
         s = s.unsqueeze(1).repeat(1, x.size()[1], 1)
-
+        # (17, 48, 256) + (17, 48, 128) --> (17, 48, 384)
         x = torch.cat((x, s), dim=-1)
+        # (17, 48, 384) --> (17, 48, 1)
         x = self.composite(x)
         return x 
 
-class TemporalConvStaticRNN(nn.Module):
-    def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2, input_dim=128, hidden_dim=128, layer_dim=3, output_dim=1, dropout_prob=0.2416, idrop=0.2595):
-        super(TemporalConvStaticRNN, self).__init__()
-        layers = []
-        num_levels = len(num_channels)
-        for i in range(num_levels):
-            dilation_size = 2 ** i
-            in_channels = num_inputs if i == 0 else num_channels[i-1]
-            out_channels = num_channels[i]
-            layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                     padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+# class TemporalConvStaticRNN(nn.Module):
+#     def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2, input_dim=128, hidden_dim=128, layer_dim=3, output_dim=1, dropout_prob=0.2416, idrop=0.2595):
+#         super(TemporalConvStaticRNN, self).__init__()
+#         layers = []
+#         num_levels = len(num_channels)
+#         for i in range(num_levels):
+#             dilation_size = 2 ** i
+#             in_channels = num_inputs if i == 0 else num_channels[i-1]
+#             out_channels = num_channels[i]
+#             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+#                                      padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
-        self.static = nn.Sequential(
-        nn.Linear(num_static, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(128, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(128, 128)
-        )
+#         self.static = nn.Sequential(
+#         nn.Linear(num_static, 128),
+#         nn.BatchNorm1d(128),
+#         nn.ReLU(),
+#         nn.Dropout(0.5),
+#         nn.Linear(128, 128),
+#         nn.BatchNorm1d(128),
+#         nn.ReLU(),
+#         nn.Dropout(0.5),
+#         nn.Linear(128, 128)
+#         )
 
-        self.composite = nn.Sequential(
-        nn.Linear(128+num_channels[-1], 128),
-        # nn.BatchNorm1d(24),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(128, 128)
-        )
-        # composite is reduced inorder to extract features, which is set to 128 right now 
-        self.network = nn.Sequential(*layers)
+#         self.composite = nn.Sequential(
+#         nn.Linear(128+num_channels[-1], 128),
+#         # nn.BatchNorm1d(24),
+#         nn.ReLU(),
+#         nn.Dropout(0.5),
+#         nn.Linear(128, 128)
+#         )
+#         # composite is reduced inorder to extract features, which is set to 128 right now 
+#         self.network = nn.Sequential(*layers)
 
-        #RNN
-        self.input_dim = input_dim 
-        self.hidden_dim = hidden_dim
-        self.layer_dim = layer_dim
-        self.dropout_prob = dropout_prob
-        self.output_dim = output_dim
-        # self.nonlinearity = activation
-        self.idrop = idrop 
+#         #RNN
+#         self.input_dim = input_dim 
+#         self.hidden_dim = hidden_dim
+#         self.layer_dim = layer_dim
+#         self.dropout_prob = dropout_prob
+#         self.output_dim = output_dim
+#         # self.nonlinearity = activation
+#         self.idrop = idrop 
 
-        self.rnn = nn.LSTM(self.input_dim, self.hidden_dim, self.layer_dim, batch_first=True, dropout=self.dropout_prob)
-        self.lockdrop = LockedDropout()
-        # Fully connected layer
-        self.fc = nn.Linear(self.hidden_dim, self.output_dim)
+#         self.rnn = nn.LSTM(self.input_dim, self.hidden_dim, self.layer_dim, batch_first=True, dropout=self.dropout_prob)
+#         self.lockdrop = LockedDropout()
+#         # Fully connected layer
+#         self.fc = nn.Linear(self.hidden_dim, self.output_dim)
 
 
-    def forward(self, x, s):
-        x = self.network(x)
-        x = x.contiguous().transpose(1, 2)
-        s = self.static(s)
-        s = s.unsqueeze(1).repeat(1, x.size()[1], 1)
+#     def forward(self, x, s):
+#         x = self.network(x)
+#         x = x.contiguous().transpose(1, 2)
+#         s = self.static(s)
+#         s = s.unsqueeze(1).repeat(1, x.size()[1], 1)
 
-        x = torch.cat((x, s), dim=-1)
-        x = self.composite(x)
+#         x = torch.cat((x, s), dim=-1)
+#         x = self.composite(x)
 
-        td_input = self.lockdrop(x, self.idrop)
+#         td_input = self.lockdrop(x, self.idrop)
 
         
-        c0 = torch.zeros(self.layer_dim, td_input.size(0), self.hidden_dim).requires_grad_().to(device)
-        h0 = torch.zeros(self.layer_dim, td_input.size(0), self.hidden_dim).requires_grad_().to(device)
-        out, (hn, cn) = self.rnn(td_input, (h0.detach(), c0.detach()))
+#         c0 = torch.zeros(self.layer_dim, td_input.size(0), self.hidden_dim).requires_grad_().to(device)
+#         h0 = torch.zeros(self.layer_dim, td_input.size(0), self.hidden_dim).requires_grad_().to(device)
+#         out, (hn, cn) = self.rnn(td_input, (h0.detach(), c0.detach()))
         
-        # out = out[:, -1, :]
-        out = self.fc(out)
-        # x = x.transpose(1, 2)
-        return out
+#         # out = out[:, -1, :]
+#         out = self.fc(out)
+#         # x = x.transpose(1, 2)
+#         return out
 
+# Early fusion at I 
 class TemporalConvStaticE(nn.Module):
     def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
         super(TemporalConvStaticE, self).__init__()
@@ -214,22 +226,19 @@ class TemporalConvStaticE(nn.Module):
         self.network = nn.Sequential(*layers)
         self.composite = nn.Sequential(
         nn.Linear(num_channels[-1], 128),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 128),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 1)
         )
-        # self.linear = nn.Linear(1024+128, 1)
 
     def forward(self, x, s):
         # x (17, 200, 48)
-        # s (17, 41) --> (17, 41, 48) 
+        # s (17, 25) --> (17, 25, 48) 
         s = s.unsqueeze(-1).repeat(1, 1, x.size()[2])
-        x = torch.cat((x, s), dim=1)
+        x = torch.cat((x, s), dim=1) 
 
         x = self.network(x)
         x = x.contiguous().transpose(1, 2)
@@ -237,6 +246,7 @@ class TemporalConvStaticE(nn.Module):
         x = self.composite(x)
         return x 
 
+# Late fusion at VI
 class TemporalConvStaticL(nn.Module):
     def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
         super(TemporalConvStaticL, self).__init__()
@@ -265,11 +275,9 @@ class TemporalConvStaticL(nn.Module):
 
         self.composite = nn.Sequential(
         nn.Linear(num_channels[-1], 128),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 128),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 1)
@@ -277,29 +285,28 @@ class TemporalConvStaticL(nn.Module):
 
         self.s_composite = nn.Sequential(
         nn.Linear(128, 64),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(64, 32),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(32, 1)
         )
-        # self.linear = nn.Linear(1024+128, 1)
 
     def forward(self, x, s):
 
+        # (17, 200, 48) --> (17, 256, 48)
         x = self.network(x)
         x = x.contiguous().transpose(1, 2)
+        # (17, 48, 256) --> (17, 48, 128)
         x = self.composite(x)
         
+        # (17, 25) -->  (17, 128)
         s = self.static(s)
-        # (17, 128)
+        # (17, 128)  --> (17, 48, 128)
         s = s.unsqueeze(1).repeat(1, x.size()[1], 1)
-        # (17, 48, 128)
+        # (17, 48, 128) --> (17, 48, 1)
         s = self.s_composite(s)
-        # (17, 48, 1)
 
         x = torch.add(x, s)
         
@@ -333,11 +340,9 @@ class TemporalConvStaticA(nn.Module):
 
         self.composite = nn.Sequential(
         nn.Linear(num_channels[-1]+128, 128),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 128),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(128, 1)
@@ -345,38 +350,41 @@ class TemporalConvStaticA(nn.Module):
 
         self.s_composite = nn.Sequential(
         nn.Linear(128, 64),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(64, 32),
-        # nn.BatchNorm1d(24),
         nn.ReLU(),
         nn.Dropout(0.2),
         nn.Linear(32, 1)
         )
-        # self.linear = nn.Linear(1024+128, 1)
 
     def forward(self, x, s):
 
         # early 
-        s_1= s.unsqueeze(-1).repeat(1, 1, x.size()[2]) # (6, 31, 24)
-        x = torch.cat((x, s_1), dim=1) #(6, 213, 24)
-
-        x = self.network(x) # (6, 1024, 24)
+        # (17, 25) --> (17, 25, 48)
+        s_1= s.unsqueeze(-1).repeat(1, 1, x.size()[2])
+        # (17, 25, 48) + (17, 200, 48) --> (17, 225, 48)
+        x = torch.cat((x, s_1), dim=1) 
+        # (17, 225, 48) --> (17, 256, 48)
+        x = self.network(x) 
+        # (17, 256, 48) --> (17, 48, 256)
         x = x.contiguous().transpose(1, 2) #(6, 24, 1024)
 
         # intermediate
-        ss = self.static(s)  #(6, 128)
-        s_2 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) # #(6, 24, 128)
-        x = torch.cat((x, s_2), dim=-1) #(6, 24, 1024+128)
-        x = self.composite(x) #(6, 24, 1)
+        # (17, 25) -->  (17, 128)
+        ss = self.static(s)  
+        # (17, 128)  --> (17, 48, 128)
+        s_2 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) 
+        # (17, 48, 256) + (17, 48, 128) --> (17, 48, 384)
+        x = torch.cat((x, s_2), dim=-1) 
+        # (17, 48, 384) --> (17, 48, 1)
+        x = self.composite(x)
 
         # late 
-        # s = self.static(s)  #(6, 128)
-        # s3 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) #(6, 24, 128)
-        s3 = self.s_composite(s_2) #(6, 24, 1)
-
-        x = torch.add(x, s3) # (6, 24, 1) 
+        # (17, 48, 128) --> (17, 48, 1)
+        s3 = self.s_composite(s_2) 
+        # (17, 48, 1) + (17, 48, 1) --> (17, 48, 1)
+        x = torch.add(x, s3) 
         
         return x 
 
