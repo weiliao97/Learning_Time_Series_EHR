@@ -34,11 +34,12 @@ class Dataset(data.Dataset):
         return len(self.target)
 
 class BySequenceLengthSampler(Sampler):
-
+    """ 
+    A custom Sampler that yields a list of batch indices at a time 
+    """
     def __init__(self, data_source,  
                 bucket_boundaries, batch_size=64,):
         """
-        feeding in data that is already grouped by sequence length, while still shuffling it somewhat
             data_source: list of arrays [(200, 48), (200, 23), (200, 7), ...]
             bucket_boundaries: list of sequence lengths to group by. e.g. [1, 2, 8, ...., 122, 131, 141, 150, 163, 176, 191, 219]
             batch_size: batch size to use
@@ -92,25 +93,30 @@ class BySequenceLengthSampler(Sampler):
 
 def col_fn(batchdata):
     """
-        batchdata is a list of (data, static, target, stayid) 
-        [[(bs, 200, 48), (bs, 25), (bs, 48, 1), (bs, 1)], [(), (), (), ()]....]
+    A simple collate fn works like this: 
+
+        def my_collate(batch):
+            data = [item[0] for item in batch]
+            target = [item[1] for item in batch]
+            target = torch.LongTensor(target)
+            return [data, target]
+
+        batchdata is a list of (data, static, target, stayid), which is picked by the custom sampler we wrote above
+        [[(200, 48), (25), (48, 1), (1)], [(200, 28), (25), (48,1), (1)], [(200, 100), (25), (48, 1), (1)] ....]
     """
-# dat = [train_dataset[i] for i in range(32)]
+
     len_data = len(batchdata)  
-    variety_data = len(batchdata[0])
-    # in batchdata, shape [(182, 48)]
     seq_len = [batchdata[i][0].shape[-1] for i in range(len_data)]
     # [(48, ), (28, ), (100, )....]
     len_tem = [np.zeros((batchdata[i][0].shape[-1])) for i in range(len_data)]
     max_len = max(seq_len)
 
-            # [(182, 48) ---> (182, 100)]
+    # [(200, 48) ---> (200, 100)]
     padded_td = [np.pad(batchdata[i][0], pad_width=((0, 0), (0, max_len-batchdata[i][0].shape[-1])), \
                 mode='constant', constant_values=-3) for i in range(len_data)]
     # [(48, 1) ---> (100, 1)]
     padded_label = [np.pad(batchdata[i][2], pad_width=((0, max_len-batchdata[i][0].shape[-1]), (0, 0)), \
                 mode='constant', constant_values=0) for i in range(len_data)]
-    # 
     static = [batchdata[i][1] for i in range(len_data)]
     stayids = [batchdata[i][3] for i in range(len_data)]
     
@@ -121,7 +127,6 @@ def col_fn(batchdata):
     return torch.from_numpy(np.stack(padded_td)), torch.from_numpy(np.stack(static)), 
             torch.from_numpy(np.asarray(padded_label)), torch.from_numpy(np.asarray(stayids)), 
             torch.from_numpy(np.stack(mask))
-
 
 def generate_buckets(bs, train_hist):
     """
@@ -152,6 +157,14 @@ def get_data_loader(args, train_head, dev_head, test_head,
                 train_sofa_tail, dev_sofa_tail, test_sofa_tail, 
                 train_static = None, dev_static = None, test_static = None, 
                 train_id = None, dev_id = None, test_id = None):
+    """
+    Args:
+        args: main arguments
+        train_head: list of train head data, e.g. [(200, 48), (200, 15), (200, 9), ...]
+        dev_head: list of dev head data, 
+        test_head: list of test head data,
+        train_sofa_tail: list of tail part SOFA target. 
+    """
     
     train_dataset = Dataset(train_head, train_sofa_tail, static = train_static, stayid = train_id)
     val_dataset = Dataset(dev_head, dev_sofa_tail, static = dev_static, stayid = dev_id)
