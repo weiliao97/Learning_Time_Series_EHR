@@ -26,7 +26,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parser for Tranformer models")
     # data
     parser.add_argument("--dataset_path", type=str, help="path to the dataset")
-    parser.add_argument("--database", type=str, default='mimic' choices=['mimic', 'eicu'])
+    parser.add_argument("--database", type=str, default='mimic', choices=['mimic', 'eicu'])
     parser.add_argument("--bucket_size", type=int, default=300, help="path to the dataset")
     parser.add_argument("--use_sepsis3", action='store_false', default=True, help="Whethe only use sepsis3 subset")
     parser.add_argument("--model_name", type=str, default='TCN', choices=['TCN', 'RNN', 'Transformer'])
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     parser.add_argument("--layer_dim", type=int, default=3, help="RNN layer dim")
 
     # transformer
-    parser.add_argument('--warmup', action='store_true', deafult=False, help="whether use learning rate warm up")
+    parser.add_argument('--warmup', action='store_true', help="whether use learning rate warm up")
     parser.add_argument('--lr_factor', type=int, default=0.1, help="warmup_learning rate factor")
     parser.add_argument('--lr_steps', type=int, default=2000, help="warmup_learning warm up steps")
     parser.add_argument("--d_model", type=int, default=256, help="Dimension of the model")
@@ -86,9 +86,9 @@ if __name__ == "__main__":
     arg_dict['encode_param'] = [128, 128, 128, 0.2]
 
     # log params
-    run['parameters'] = arg_dict
+    # run['parameters'] = arg_dict
     workname = date + '_' + args.database + '_' + args.model_name + args.checkpoint
-    creat_checkpoint_folder('./checkpoints/' + workname, 'params.json', arg_dict)
+    utils.creat_checkpoint_folder('./checkpoints/' + workname, 'params.json', arg_dict)
 
     # load_data
     meep_mimic = np.load(
@@ -106,220 +106,220 @@ if __name__ == "__main__":
 
     train_head, train_static, train_sofa, train_id = utils.crop_data_target(train_vital, mimic_target, mimic_static, 'train')
     dev_head, dev_static, dev_sofa, dev_id = utils.crop_data_target(dev_vital, mimic_target, mimic_static, 'dev')
-    test_head, test_static, test_sofa, test_id = crop_data_target(test_vital, mimic_target, mimic_static, 'test')
+    test_head, test_static, test_sofa, test_id = utils.crop_data_target(test_vital, mimic_target, mimic_static, 'test')
 
     if args.use_sepsis3 == True:
-        train_head, train_static, train_sofa, train_id = filter_sepsis(train_head, train_static, train_sofa, train_id)
-        dev_head, dev_static, dev_sofa, dev_id = filter_sepsis(dev_head, dev_static, dev_sofa, dev_id)
-        test_head, test_static, test_sofa, test_id = filter_sepsis(test_head, test_static, test_sofa, test_id)
+        train_head, train_static, train_sofa, train_id = utils.filter_sepsis(train_head, train_static, train_sofa, train_id)
+        dev_head, dev_static, dev_sofa, dev_id = utils.filter_sepsis(dev_head, dev_static, dev_sofa, dev_id)
+        test_head, test_static, test_sofa, test_id = utils.filter_sepsis(test_head, test_static, test_sofa, test_id)
 
     input_dim =train_head[0].shape[0]
 
 
-    else:
+    # else:
         # creat model default model is TCN to explore different kinds of fusion
-        if args.static_fusion == 'no_static':
+    if args.static_fusion == 'no_static':
 
-            # if args.model_name == 'TCN':
-            model = models.TemporalConv(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                        kernel_size=args.kernel_size, dropout=args.dropout)
-        elif args.static_fusion == 'med':
-            model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                              num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+        # if args.model_name == 'TCN':
+        model = models.TemporalConv(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
+                                    kernel_size=args.kernel_size, dropout=args.dropout)
+    elif args.static_fusion == 'med':
+        model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
+                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
 
-        elif args.static_fusion == 'early':
-            model = models.TemporalConvStaticE(num_inputs=225, num_channels=arg_dict['num_channels'], \
-                                               num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+    elif args.static_fusion == 'early':
+        model = models.TemporalConvStaticE(num_inputs=225, num_channels=arg_dict['num_channels'], \
+                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
 
-        elif args.static_fusion == 'late':
-            model = models.TemporalConvStaticL(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                               num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
-        elif args.static_fusion == 'all':
-            model = models.TemporalConvStaticA(num_inputs=225, num_channels=arg_dict['num_channels'], \
-                                               num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+    elif args.static_fusion == 'late':
+        model = models.TemporalConvStaticL(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
+                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+    elif args.static_fusion == 'all':
+        model = models.TemporalConvStaticA(num_inputs=225, num_channels=arg_dict['num_channels'], \
+                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
 
 
-        else:  # inside
-            model = models.TemporalConvStaticI(num_inputs=225, num_channels=arg_dict['num_channels'], num_static=25,
-                                               kernel_size=args.kernel_size, \
-                                               dropout=args.dropout, s_param=arg_dict['s_param'],
-                                               c_param=arg_dict['c_param'], sc_param=arg_dict['sc_param'], \
-                                               use_encode=arg_dict['use_encode'], encode_param=arg_dict['encode_param'],
-                                               fuse_inside=arg_dict['fuse_inside'])
+    else:  # inside
+        model = models.TemporalConvStaticI(num_inputs=225, num_channels=arg_dict['num_channels'], num_static=25,
+                                            kernel_size=args.kernel_size, \
+                                            dropout=args.dropout, s_param=arg_dict['s_param'],
+                                            c_param=arg_dict['c_param'], sc_param=arg_dict['sc_param'], \
+                                            use_encode=arg_dict['use_encode'], encode_param=arg_dict['encode_param'],
+                                            fuse_inside=arg_dict['fuse_inside'])
 
-            # elif args.model_name == 'RNN':
-            #     model = models.RecurrentModel(cell=args.rnn_type, input_dim = input_dim, hidden_dim=args.hidden_dim, layer_dim=args.layer_dim, \
-            #                                 output_dim=1, dropout_prob=args.dropout, idrop=args.idrop)
+        # elif args.model_name == 'RNN':
+        #     model = models.RecurrentModel(cell=args.rnn_type, input_dim = input_dim, hidden_dim=args.hidden_dim, layer_dim=args.layer_dim, \
+        #                                 output_dim=1, dropout_prob=args.dropout, idrop=args.idrop)
 
-            # elif args.model_name == 'Transformer':
-            #     model = models.Trans_encoder(feature_dim=input_dim, d_model=args.d_model, \
-            #           nhead=args.n_head, d_hid=args.dim_ff_mul * args.d_model, \
-            #           nlayers=args.num_enc_layer, out_dim=1, dropout=args.dropout)
+        # elif args.model_name == 'Transformer':
+        #     model = models.Trans_encoder(feature_dim=input_dim, d_model=args.d_model, \
+        #           nhead=args.n_head, d_hid=args.dim_ff_mul * args.d_model, \
+        #           nlayers=args.num_enc_layer, out_dim=1, dropout=args.dropout)
 
-        print('Model trainable parameters are: %d' % utils.count_parameters(model))
-        torch.save(model.state_dict(), '/content/start_weights.pt')
+    print('Model trainable parameters are: %d' % utils.count_parameters(model))
+    torch.save(model.state_dict(), '/content/start_weights.pt')
 
-        model.to(device)
+    model.to(device)
+    best_loss = 1e4
+
+    # loss fn and optimizer
+    loss_fn = nn.MSELoss()
+    model_opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+    # fuse inside opt term
+    # model_opt = torch.optim.Adam([
+    #     {'params': model.TB1.parameters()},
+    #     {'params': model.TB2.parameters()},
+    #     {'params': model.TB3.parameters()},
+    #     {'params': model.TB4.parameters()},
+    #     {'params': model.composite.parameters()},
+    #     {'params': model.static.parameters(), 'weight_decay':  0.0001},
+    #     {'params': model.static1.parameters(), 'weight_decay':  0.0001},
+    #     {'params': model.static2.parameters(), 'weight_decay':  0.0001},
+    #     {'params': model.static3.parameters(), 'weight_decay':  0.0001},
+    #     {'params': model.s_composite.parameters(), 'weight_decay':  0.0001}
+    # ], lr=args.lr)
+
+    # prepare data  # dataversion 0413, 0414, 0511
+    # data_label = np.load('/content/drive/My Drive/Colab Notebooks/MIMIC/eICU_compile_0520_2022.npy', \
+    #                 allow_pickle=True).item()
+
+    # train_head = data_label['train_head']
+    # static_train_filter = data_label['static_train_filter']
+    # train_sofa_tail = data_label['train_sofa_tail']
+    # train_sofa_head = data_label['train_sofa_head']
+    # dev_head = data_label['dev_head']
+    # static_dev_filter = data_label['static_dev_filter']
+    # dev_sofa_tail = data_label['dev_sofa_tail']
+    # dev_sofa_head = data_label['dev_sofa_head']
+    # test_head = data_label['test_head']
+    # static_test_filter = data_label['static_test_filter']
+    # test_sofa_tail = data_label['test_sofa_tail']
+    # test_sofa_head = data_label ['test_sofa_head']
+    # s_train = np.stack(static_train_filter, axis=0)
+    # s_dev = np.stack(static_dev_filter, axis=0)
+    # s_test = np.stack(static_test_filter, axis=0)
+    # reduce to only dynamic ot intervention
+    # def reduce_dynamic(full_dynamic):
+    #     return [full_dynamic[i][184:, :] for i in range(len(full_dynamic))]
+
+    # train_head = reduce_dynamic(train_head)
+    # dev_head = reduce_dynamic(dev_head)
+    # test_head = reduce_dynamic(test_head)
+
+    # 10-fold cross validation
+    trainval_head = train_head + dev_head
+    trainval_static = train_static + dev_static
+    trainval_stail = train_sofa + dev_sofa
+    trainval_ids = train_id + dev_id
+
+    for c_fold, (train_index, test_index) in enumerate(kf.split(trainval_head)):
         best_loss = 1e4
+        patience = 0
+        if c_fold >= 1:
+            model.load_state_dict(torch.load('/content/start_weights.pt'))
+        print('Starting Fold %d' % c_fold)
+        print("TRAIN:", len(train_index), "TEST:", len(test_index))
+        train_head, val_head = utils.slice_data(trainval_head, train_index), utils.slice_data(trainval_head, test_index)
+        train_static, val_static = utils.slice_data(trainval_static, train_index), utils.slice_data(trainval_static, test_index)
+        train_stail, val_stail = utils.slice_data(trainval_stail, train_index), utils.slice_data(trainval_stail, test_index)
+        train_id, val_id = utils.slice_data(trainval_ids, train_index), utils.slice_data(trainval_ids, test_index)
 
-        # loss fn and optimizer
-        loss_fn = nn.MSELoss()
-        model_opt = torch.optim.Adam(model.parameters(), lr=args.lr)
-        # fuse inside opt term
-        # model_opt = torch.optim.Adam([
-        #     {'params': model.TB1.parameters()},
-        #     {'params': model.TB2.parameters()},
-        #     {'params': model.TB3.parameters()},
-        #     {'params': model.TB4.parameters()},
-        #     {'params': model.composite.parameters()},
-        #     {'params': model.static.parameters(), 'weight_decay':  0.0001},
-        #     {'params': model.static1.parameters(), 'weight_decay':  0.0001},
-        #     {'params': model.static2.parameters(), 'weight_decay':  0.0001},
-        #     {'params': model.static3.parameters(), 'weight_decay':  0.0001},
-        #     {'params': model.s_composite.parameters(), 'weight_decay':  0.0001}
-        # ], lr=args.lr)
+        train_dataloader, dev_dataloader, test_dataloader = prepare_data.get_data_loader(args, train_head, val_head,
+                                                                                            test_head, \
+                                                                                            train_stail, val_stail,
+                                                                                            test_sofa,
+                                                                                            train_static=train_static,
+                                                                                            dev_static=dev_static,
+                                                                                            test_static=test_static,
+                                                                                            train_id=train_id,
+                                                                                            dev_id=val_id,
+                                                                                            test_id=test_id)
 
-        # prepare data  # dataversion 0413, 0414, 0511
-        # data_label = np.load('/content/drive/My Drive/Colab Notebooks/MIMIC/eICU_compile_0520_2022.npy', \
-        #                 allow_pickle=True).item()
+        for j in range(args.epochs):
+            model.train()
+            sofa_list = []
+            sofap_list = []
+            loss_t = []
+            loss_to = []
 
-        # train_head = data_label['train_head']
-        # static_train_filter = data_label['static_train_filter']
-        # train_sofa_tail = data_label['train_sofa_tail']
-        # train_sofa_head = data_label['train_sofa_head']
-        # dev_head = data_label['dev_head']
-        # static_dev_filter = data_label['static_dev_filter']
-        # dev_sofa_tail = data_label['dev_sofa_tail']
-        # dev_sofa_head = data_label['dev_sofa_head']
-        # test_head = data_label['test_head']
-        # static_test_filter = data_label['static_test_filter']
-        # test_sofa_tail = data_label['test_sofa_tail']
-        # test_sofa_head = data_label ['test_sofa_head']
-        # s_train = np.stack(static_train_filter, axis=0)
-        # s_dev = np.stack(static_dev_filter, axis=0)
-        # s_test = np.stack(static_test_filter, axis=0)
-        # reduce to only dynamic ot intervention
-        # def reduce_dynamic(full_dynamic):
-        #     return [full_dynamic[i][184:, :] for i in range(len(full_dynamic))]
+            for vitals, static, target, train_ids, key_mask in train_dataloader:
+                # print(label.shape)
+                if args.warmup == True:
+                    model_opt.optimizer.zero_grad()
+                else:
+                    model_opt.zero_grad()
+                # ti_data = Variable(ti.float().to(device))
+                # td_data = vitals.to(device) # (6, 182, 24)
+                # sofa = target.to(device)
+                # if args.model_name == 'TCN': # always TCN
+                sofa_p = model(vitals.to(device), static.to(device))
 
-        # train_head = reduce_dynamic(train_head)
-        # dev_head = reduce_dynamic(dev_head)
-        # test_head = reduce_dynamic(test_head)
+                # elif args.model_name == 'RNN':
+                #     # x_lengths have to be a 1d tensor
+                #     td_transpose = vitals.to(device).transpose(1, 2)
+                #     x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
+                #     sofa_p = model(td_transpose, x_lengths)
+                # elif args.model_name == 'Transformer':
+                #     tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
+                #     sofa_p = model(vitals.to(device), tgt_mask, key_mask.to(device))
 
-        # 10-fold cross validation
-        trainval_head = train_head + dev_head
-        trainval_static = train_static + dev_static
-        trainval_stail = train_sofa + dev_sofa
-        trainval_ids = train_id + dev_id
+                loss = utils.mse_maskloss(sofa_p, target.to(device), key_mask.to(device))
+                # l1_penalty = calculate_l1(model)
+                # loss = loss + 0.001*l1_penalty
+                loss.backward()
+                model_opt.step()
 
-        for c_fold, (train_index, test_index) in enumerate(kf.split(trainval_head)):
-            best_loss = 1e4
-            patience = 0
-            if c_fold >= 1:
-                model.load_state_dict(torch.load('/content/start_weights.pt'))
-            print('Starting Fold %d' % c_fold)
-            print("TRAIN:", len(train_index), "TEST:", len(test_index))
-            train_head, val_head = slice_data(trainval_head, train_index), slice_data(trainval_head, test_index)
-            train_static, val_static = slice_data(trainval_static, train_index), slice_data(trainval_static, test_index)
-            train_stail, val_stail = slice_data(trainval_stail, train_index), slice_data(trainval_stail, test_index)
-            train_id, val_id = slice_data(trainval_ids, train_index), slice_data(trainval_ids, test_index)
+                sofa_list.append(target)
+                sofap_list.append(sofa_p)
+                loss_t.append(loss)
 
-            train_dataloader, dev_dataloader, test_dataloader = prepare_data.get_data_loader(args, train_head, val_head,
-                                                                                             test_head, \
-                                                                                             train_stail, val_stail,
-                                                                                             test_sofa,
-                                                                                             train_static=train_static,
-                                                                                             dev_static=dev_static,
-                                                                                             test_static=test_static,
-                                                                                             train_id=train_id,
-                                                                                             dev_id=val_id,
-                                                                                             test_id=test_id)
+            loss_avg = np.mean(torch.stack(loss_t, dim=0).cpu().detach().numpy())
 
-            for j in range(args.epochs):
-                model.train()
-                sofa_list = []
-                sofap_list = []
-                loss_t = []
-                loss_to = []
+            model.eval()
+            y_list = []
+            y_pred_list = []
+            ti_list = []
+            td_list = []
+            id_list = []
+            loss_val = []
+            with torch.no_grad():  # validation does not require gradient
 
-                for vitals, static, target, train_ids, key_mask in train_dataloader:
-                    # print(label.shape)
-                    if args.warmup == True:
-                        model_opt.optimizer.zero_grad()
-                    else:
-                        model_opt.zero_grad()
-                    # ti_data = Variable(ti.float().to(device))
-                    # td_data = vitals.to(device) # (6, 182, 24)
-                    # sofa = target.to(device)
-                    # if args.model_name == 'TCN': # always TCN
-                    sofa_p = model(vitals.to(device), static.to(device))
+                for vitals, static, target, val_ids, key_mask in dev_dataloader:
+                    # ti_test = Variable(torch.FloatTensor(ti)).to(device)
+                    # td_test = Variable(torch.FloatTensor(vitals)).to(device)
+                    # sofa_t = Variable(torch.FloatTensor(target)).to(device)
 
+                    # tgt_mask_test = model.get_tgt_mask(td_test.shape[-1]).to(device)
+                    # if args.model_name == 'TCN':
+                    sofap_t = model(vitals.to(device), static.to(device))
                     # elif args.model_name == 'RNN':
                     #     # x_lengths have to be a 1d tensor
                     #     td_transpose = vitals.to(device).transpose(1, 2)
                     #     x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
-                    #     sofa_p = model(td_transpose, x_lengths)
+                    #     sofap_t = model(td_transpose, x_lengths)
                     # elif args.model_name == 'Transformer':
                     #     tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                    #     sofa_p = model(vitals.to(device), tgt_mask, key_mask.to(device))
+                    #     sofap_t = model(vitals.to(device), tgt_mask, key_mask.to(device))
 
-                    loss = mse_maskloss(sofa_p, target.to(device), key_mask.to(device))
-                    # l1_penalty = calculate_l1(model)
-                    # loss = loss + 0.001*l1_penalty
-                    loss.backward()
-                    model_opt.step()
+                    loss_v = utils.mse_maskloss(sofap_t, target.to(device), key_mask.to(device))
+                    y_list.append(target.detach().numpy())
+                    y_pred_list.append(sofap_t.cpu().detach().numpy())
+                    loss_val.append(loss_v)
+                    id_list.append(val_ids)
 
-                    sofa_list.append(target)
-                    sofap_list.append(sofa_p)
-                    loss_t.append(loss)
+            loss_te = np.mean(torch.stack(loss_val, dim=0).cpu().detach().numpy())
+            if loss_te < best_loss:
+                patience = 0
+                best_loss = loss_te
+                # run["train/loss"].log(loss_avg)
+                torch.save(model.state_dict(),
+                            './checkpoints/' + workname + '/' + 'fold%d' % c_fold + '_best_loss.pt')
+            else:
+                patience += 1
+                if patience >= 10:
+                    print('Start next fold')
+                    break
 
-                loss_avg = np.mean(torch.stack(loss_t, dim=0).cpu().detach().numpy())
-
-                model.eval()
-                y_list = []
-                y_pred_list = []
-                ti_list = []
-                td_list = []
-                id_list = []
-                loss_val = []
-                with torch.no_grad():  # validation does not require gradient
-
-                    for vitals, static, target, val_ids, key_mask in dev_dataloader:
-                        # ti_test = Variable(torch.FloatTensor(ti)).to(device)
-                        # td_test = Variable(torch.FloatTensor(vitals)).to(device)
-                        # sofa_t = Variable(torch.FloatTensor(target)).to(device)
-
-                        # tgt_mask_test = model.get_tgt_mask(td_test.shape[-1]).to(device)
-                        # if args.model_name == 'TCN':
-                        sofap_t = model(vitals.to(device), static.to(device))
-                        # elif args.model_name == 'RNN':
-                        #     # x_lengths have to be a 1d tensor
-                        #     td_transpose = vitals.to(device).transpose(1, 2)
-                        #     x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
-                        #     sofap_t = model(td_transpose, x_lengths)
-                        # elif args.model_name == 'Transformer':
-                        #     tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                        #     sofap_t = model(vitals.to(device), tgt_mask, key_mask.to(device))
-
-                        loss_v = mse_maskloss(sofap_t, target.to(device), key_mask.to(device))
-                        y_list.append(target.detach().numpy())
-                        y_pred_list.append(sofap_t.cpu().detach().numpy())
-                        loss_val.append(loss_v)
-                        id_list.append(val_ids)
-
-                loss_te = np.mean(torch.stack(loss_val, dim=0).cpu().detach().numpy())
-                if loss_te < best_loss:
-                    patience = 0
-                    best_loss = loss_te
-                    run["train/loss"].log(loss_avg)
-                    torch.save(model.state_dict(),
-                               './checkpoints/' + workname + '/' + 'fold%d' % c_fold + '_best_loss.pt')
-                else:
-                    patience += 1
-                    if patience >= 10:
-                        print('Start next fold')
-                        break
-
-                run["train/loss_fold%d" % c_fold].log(loss_avg)
-                run["val/loss_fold%d" % c_fold].log(loss_te)
-                print('Epoch %d, : Train loss is %.4f, test loss is %.4f' % (j, loss_avg, loss_te))
+            # run["train/loss_fold%d" % c_fold].log(loss_avg)
+            # run["val/loss_fold%d" % c_fold].log(loss_te)
+            print('Epoch %d, : Train loss is %.4f, test loss is %.4f' % (j, loss_avg, loss_te))
