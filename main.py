@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -132,9 +131,11 @@ if __name__ == "__main__":
         # creat model default model is TCN to explore different kinds of fusion
     if args.static_fusion == 'no_static':
 
-        # if args.model_name == 'TCN':
-        model = models.TemporalConv(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                    kernel_size=args.kernel_size, dropout=args.dropout)
+        if args.model_name == 'TCN':
+            model = models.TemporalConv(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
+                                        kernel_size=args.kernel_size, dropout=args.dropout)
+   
+        
     elif args.static_fusion == 'med':
         model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
                                             num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
@@ -237,7 +238,7 @@ if __name__ == "__main__":
         train_id, val_id = utils.slice_data(trainval_ids, train_index), utils.slice_data(trainval_ids, test_index)
 
         train_dataloader, dev_dataloader, test_dataloader = prepare_data.get_data_loader(args, train_head, val_head,
-                                                                                            test_head, \
+                                                                                            test_head, 
                                                                                             train_stail, val_stail,
                                                                                             test_sofa,
                                                                                             train_static=train_static,
@@ -263,17 +264,19 @@ if __name__ == "__main__":
                 # ti_data = Variable(ti.float().to(device))
                 # td_data = vitals.to(device) # (6, 182, 24)
                 # sofa = target.to(device)
-                # if args.model_name == 'TCN': # always TCN
-                sofa_p = model(vitals.to(device), static.to(device))
-
-                # elif args.model_name == 'RNN':
-                #     # x_lengths have to be a 1d tensor
-                #     td_transpose = vitals.to(device).transpose(1, 2)
-                #     x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
-                #     sofa_p = model(td_transpose, x_lengths)
-                # elif args.model_name == 'Transformer':
-                #     tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                #     sofa_p = model(vitals.to(device), tgt_mask, key_mask.to(device))
+                if args.static_fusion == 'no_static'
+                    if args.model_name == 'TCN': 
+                        sofa_p = model(vitals.to(device))
+                    elif args.model_name == 'RNN':
+                        # x_lengths have to be a 1d tensor
+                        td_transpose = vitals.to(device).transpose(1, 2)
+                        x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
+                        sofa_p = model(td_transpose, x_lengths)
+                    elif args.model_name == 'Transformer':
+                        tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
+                        sofa_p = model(vitals.to(device), tgt_mask, key_mask.to(device))
+                else:
+                    sofa_p = model(vitals.to(device), static.to(device))
 
                 loss = utils.mse_maskloss(sofa_p, target.to(device), key_mask.to(device))
                 # l1_penalty = calculate_l1(model)
@@ -297,22 +300,20 @@ if __name__ == "__main__":
             with torch.no_grad():  # validation does not require gradient
 
                 for vitals, static, target, val_ids, key_mask in dev_dataloader:
-                    # ti_test = Variable(torch.FloatTensor(ti)).to(device)
-                    # td_test = Variable(torch.FloatTensor(vitals)).to(device)
-                    # sofa_t = Variable(torch.FloatTensor(target)).to(device)
-
-                    # tgt_mask_test = model.get_tgt_mask(td_test.shape[-1]).to(device)
-                    # if args.model_name == 'TCN':
-                    sofap_t = model(vitals.to(device), static.to(device))
-                    # elif args.model_name == 'RNN':
-                    #     # x_lengths have to be a 1d tensor
-                    #     td_transpose = vitals.to(device).transpose(1, 2)
-                    #     x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
-                    #     sofap_t = model(td_transpose, x_lengths)
-                    # elif args.model_name == 'Transformer':
-                    #     tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                    #     sofap_t = model(vitals.to(device), tgt_mask, key_mask.to(device))
-
+                   
+                    if args.static_fusion == 'no_static':
+                        if args.model_name == 'TCN':
+                            sofap_t = model(vitals.to(device))
+                        elif args.model_name == 'RNN':
+                            # x_lengths have to be a 1d tensor 
+                            td_transpose = vitals.to(device).transpose(1, 2)
+                            x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
+                            sofap_t = model(td_transpose, x_lengths)
+                        elif args.model_name == 'Transformer':
+                            tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
+                            sofap_t = model(vitals.to(device), tgt_mask, key_mask.to(device))
+                    else:
+                         sofap_t = model(vitals.to(device), static.to(device))
                     loss_v = utils.mse_maskloss(sofap_t, target.to(device), key_mask.to(device))
                     y_list.append(target.detach().numpy())
                     y_pred_list.append(sofap_t.cpu().detach().numpy())
@@ -323,7 +324,6 @@ if __name__ == "__main__":
             if loss_te < best_loss:
                 patience = 0
                 best_loss = loss_te
-                # run["train/loss"].log(loss_avg)
                 torch.save(model.state_dict(),
                             './checkpoints/' + workname + '/' + 'fold%d' % c_fold + '_best_loss.pt')
             else:
@@ -331,7 +331,4 @@ if __name__ == "__main__":
                 if patience >= 10:
                     print('Start next fold')
                     break
-
-            # run["train/loss_fold%d" % c_fold].log(loss_avg)
-            # run["val/loss_fold%d" % c_fold].log(loss_te)
             print('Epoch %d, : Train loss is %.4f, test loss is %.4f' % (j, loss_avg, loss_te))
