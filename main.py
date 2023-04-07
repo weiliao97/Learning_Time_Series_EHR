@@ -36,8 +36,11 @@ if __name__ == "__main__":
     # how to fuse with transformer models and LSTM models is still pending
     parser.add_argument("--static_fusion", type=str, default='med',
                         choices=['no_static', 'early', 'med', 'late', 'all', 'inside'])
+    # regularization 
+    parser.add_argument("--regularization", type=str, default = "none", choices = ['none', 'l1' 'l2'])
+    parser.add_argument("--l1_strength", type=float, default=0.001, help="L1 regularization lambda")
+    parser.add_argument("--l2_strength", type=float, default=0.0001, help="L2 regularization lambda")
     #  med requires 
-
     # late requires
     # all requires
     # inside requires 
@@ -123,9 +126,6 @@ if __name__ == "__main__":
 
     input_dim =train_head[0].shape[0]
 
-
-    # else:
-        # creat model default model is TCN to explore different kinds of fusion
     if args.static_fusion == 'no_static':
 
         if args.model_name == 'TCN':
@@ -173,47 +173,23 @@ if __name__ == "__main__":
 
     # loss fn and optimizer
     loss_fn = nn.MSELoss()
-    model_opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+    
+    if args.regularization == 'l2':
     # fuse inside opt term
-    # model_opt = torch.optim.Adam([
-    #     {'params': model.TB1.parameters()},
-    #     {'params': model.TB2.parameters()},
-    #     {'params': model.TB3.parameters()},
-    #     {'params': model.TB4.parameters()},
-    #     {'params': model.composite.parameters()},
-    #     {'params': model.static.parameters(), 'weight_decay':  0.0001},
-    #     {'params': model.static1.parameters(), 'weight_decay':  0.0001},
-    #     {'params': model.static2.parameters(), 'weight_decay':  0.0001},
-    #     {'params': model.static3.parameters(), 'weight_decay':  0.0001},
-    #     {'params': model.s_composite.parameters(), 'weight_decay':  0.0001}
-    # ], lr=args.lr)
-
-    # prepare data  # dataversion 0413, 0414, 0511
-    # data_label = np.load('/content/drive/My Drive/Colab Notebooks/MIMIC/eICU_compile_0520_2022.npy', \
-    #                 allow_pickle=True).item()
-
-    # train_head = data_label['train_head']
-    # static_train_filter = data_label['static_train_filter']
-    # train_sofa_tail = data_label['train_sofa_tail']
-    # train_sofa_head = data_label['train_sofa_head']
-    # dev_head = data_label['dev_head']
-    # static_dev_filter = data_label['static_dev_filter']
-    # dev_sofa_tail = data_label['dev_sofa_tail']
-    # dev_sofa_head = data_label['dev_sofa_head']
-    # test_head = data_label['test_head']
-    # static_test_filter = data_label['static_test_filter']
-    # test_sofa_tail = data_label['test_sofa_tail']
-    # test_sofa_head = data_label ['test_sofa_head']
-    # s_train = np.stack(static_train_filter, axis=0)
-    # s_dev = np.stack(static_dev_filter, axis=0)
-    # s_test = np.stack(static_test_filter, axis=0)
-    # reduce to only dynamic ot intervention
-    # def reduce_dynamic(full_dynamic):
-    #     return [full_dynamic[i][184:, :] for i in range(len(full_dynamic))]
-
-    # train_head = reduce_dynamic(train_head)
-    # dev_head = reduce_dynamic(dev_head)
-    # test_head = reduce_dynamic(test_head)
+        model_opt = torch.optim.Adam([
+            {'params': model.TB1.parameters()},
+            {'params': model.TB2.parameters()},
+            {'params': model.TB3.parameters()},
+            {'params': model.TB4.parameters()},
+            {'params': model.composite.parameters()},
+            {'params': model.static.parameters(), 'weight_decay':  args.l2_strength},
+            {'params': model.static1.parameters(), 'weight_decay': args.l2_strength},
+            {'params': model.static2.parameters(), 'weight_decay': args.l2_strength},
+            {'params': model.static3.parameters(), 'weight_decay': args.l2_strength},
+            {'params': model.s_composite.parameters(), 'weight_decay':  args.l2_strength},
+        ], lr=args.lr)
+    else:
+        model_opt = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # 10-fold cross validation
     trainval_head = train_head + dev_head
@@ -275,8 +251,9 @@ if __name__ == "__main__":
                     sofa_p = model(vitals.to(device), static.to(device))
 
                 loss = utils.mse_maskloss(sofa_p, target.to(device), key_mask.to(device))
-                # l1_penalty = calculate_l1(model)
-                # loss = loss + 0.001*l1_penalty
+                if args.regularization == 'l1':
+                    l1_penalty = utils.calculate_l1(model)
+                    loss = loss + 0.001*l1_penalty
                 loss.backward()
                 model_opt.step()
 
