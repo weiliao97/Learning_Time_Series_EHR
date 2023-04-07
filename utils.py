@@ -72,6 +72,9 @@ def get_eval_results(args, model, test_loader):
     return y_list, y_pred_list, td_list, loss_te
 
 def count_parameters(model):
+    """
+    Count the number of trainable parameters in the model
+    """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
     
 
@@ -143,7 +146,8 @@ def crop_data_target(vital, target_dict, static_dict, mode):
     return train_filter, static_data, sofa_tail, stayids
 
 
-def filter_sepsis(vital, static, sofa, ids):
+def filter_sepsis(vital, static, sofa, ids): 
+
     id_df = pd.read_csv('/content/drive/My Drive/ColabNotebooks/MIMIC/TCN/mimic_sepsis3.csv')
     sepsis3_id = id_df['stay_id'].values  # 1d array
     index_dict = dict((value, idx) for idx, value in enumerate(ids))
@@ -155,7 +159,6 @@ def filter_sepsis(vital, static, sofa, ids):
 
 def slice_data(trainval_data, index):
     """
-    Slice data
-
+    Slice data based on index 
     """
     return [trainval_data[i] for i in index]
