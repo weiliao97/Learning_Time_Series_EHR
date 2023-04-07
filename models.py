@@ -389,67 +389,55 @@ class TemporalConvStaticA(nn.Module):
         return x 
 
 class TemporalConvStaticI(nn.Module):
-    def __init__(self, num_inputs, num_channels,  num_static, kernel_size, dropout, s_param, c_param, sc_param, \
-                 use_encode, encode_param, fuse_inside):
+    def __init__(self, num_inputs, num_channels,  num_static, kernel_size, dropout, s_param, c_param, sc_param):
         super(TemporalConvStaticI, self).__init__()
         layers = []
         num_levels = len(num_channels)
 
-        self.fuse_inside = fuse_inside
-
         for i in range(num_levels):
             dilation_size = 2 ** i
             if i == 0:
-                if use_encode == False:
-                    in_channels = num_inputs 
-                else:
-                    in_channels = encode_param[-2]
+                in_channels = num_inputs 
             else:
-                if fuse_inside == False:
-                    in_channels = num_channels[i-1]
-                else:
-                    in_channels = num_channels[i-1] + s_param[-2]
+                in_channels = num_channels[i-1] + s_param[-2]
             out_channels = num_channels[i]
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
                                     padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
-        if self.fuse_inside == False:
-            self.network = nn.Sequential(*layers)
-        else:
-            self.TB1 = layers[0]
-            self.TB2 = layers[1]
-            self.TB3 = layers[2]
-            self.TB4 = layers[3]
+        self.TB1 = layers[0]
+        self.TB2 = layers[1]
+        self.TB3 = layers[2]
+        self.TB4 = layers[3]
 
-            s1_layers = []
-            for i in range(len(s_param) - 2):
-                static_in = num_static if i == 0 else s_param[i-1]
-                s1_layers += [nn.Linear(static_in, s_param[i])]
-                s1_layers += [nn.ReLU()]
-                s1_layers += [nn.Dropout(s_param[-1])]
-            s1_layers += [nn.Linear(s_param[-3], s_param[-2])]
+        s1_layers = []
+        for i in range(len(s_param) - 2):
+            static_in = num_static if i == 0 else s_param[i-1]
+            s1_layers += [nn.Linear(static_in, s_param[i])]
+            s1_layers += [nn.ReLU()]
+            s1_layers += [nn.Dropout(s_param[-1])]
+        s1_layers += [nn.Linear(s_param[-3], s_param[-2])]
 
-            self.static1 = nn.Sequential(*s1_layers)
+        self.static1 = nn.Sequential(*s1_layers)
 
-            s2_layers = []
-            for i in range(len(s_param) - 2):
-                static_in = num_static if i == 0 else s_param[i-1]
-                s2_layers += [nn.Linear(static_in, s_param[i])]
-                s2_layers += [nn.ReLU()]
-                s2_layers += [nn.Dropout(s_param[-1])]
-            s2_layers += [nn.Linear(s_param[-3], s_param[-2])]
+        s2_layers = []
+        for i in range(len(s_param) - 2):
+            static_in = num_static if i == 0 else s_param[i-1]
+            s2_layers += [nn.Linear(static_in, s_param[i])]
+            s2_layers += [nn.ReLU()]
+            s2_layers += [nn.Dropout(s_param[-1])]
+        s2_layers += [nn.Linear(s_param[-3], s_param[-2])]
 
-            self.static2 = nn.Sequential(*s2_layers)
+        self.static2 = nn.Sequential(*s2_layers)
 
-            s3_layers = []
-            for i in range(len(s_param) - 2):
-                static_in = num_static if i == 0 else s_param[i-1]
-                s3_layers += [nn.Linear(static_in, s_param[i])]
-                s3_layers += [nn.ReLU()]
-                s3_layers += [nn.Dropout(s_param[-1])]
-            s3_layers += [nn.Linear(s_param[-3], s_param[-2])]
+        s3_layers = []
+        for i in range(len(s_param) - 2):
+            static_in = num_static if i == 0 else s_param[i-1]
+            s3_layers += [nn.Linear(static_in, s_param[i])]
+            s3_layers += [nn.ReLU()]
+            s3_layers += [nn.Dropout(s_param[-1])]
+        s3_layers += [nn.Linear(s_param[-3], s_param[-2])]
 
-            self.static3 = nn.Sequential(*s3_layers)
+        self.static3 = nn.Sequential(*s3_layers)
 
             
         s_layers = []
@@ -483,69 +471,62 @@ class TemporalConvStaticI(nn.Module):
 
         self.s_composite = nn.Sequential(*sc_layers)
 
-        self.use_encode = use_encode
-
-        if self.use_encode == True:
-            encode_layers = [] # (6, 24, 213) 
-            for i in range(len(encode_param) - 2):
-                s_composite_in = num_inputs if i == 0 else encode_param[i-1]
-                encode_layers += [nn.Linear(s_composite_in, encode_param[i])]
-                encode_layers += [nn.ReLU()]
-                encode_layers += [nn.Dropout(encode_param[-1])]
-
-            encode_layers += [nn.Linear(encode_param[-3], encode_param[-2])]
-
-            self.encode = nn.Sequential(*encode_layers)
-        
-
     def forward(self, x, s):
+        # early  (17, 25) --> (17, 25, 48)
+        s_1= s.unsqueeze(-1).repeat(1, 1, x.size()[2]) 
+        # (17, 25, 48) + (17, 200, 48) --> (17, 225, 48)
+        x = torch.cat((x, s_1), dim=1) 
 
-        # early 
-        s_1= s.unsqueeze(-1).repeat(1, 1, x.size()[2]) # (6, 31, 24)
-        
-        x = torch.cat((x, s_1), dim=1) #(6, 213, 24)
-        if self.use_encode == True:
-            x = x.contiguous().transpose(1, 2)  # (6, 24, 213) for learning relationships between channels
-            x = self.encode(x) #(6, 24, 128)
-            x = x.contiguous().transpose(1, 2) #(6, 128, 24)
-        if self.fuse_inside == False:
-            x = self.network(x) # (6, 1024, 24)
-        else:
-            # start all level fusion 
-            ss1 = self.static1(s) #(6, 128)
-            x = self.TB1(x) # (6, 1024, 24)
-            s1_r = ss1.unsqueeze(-1).repeat(1, 1, x.size()[-1]) #(6, 128, 24)
-            x = torch.cat((x, s1_r), dim=1) #(6, 1024+128, 24)
+        # start all level fusion 
+        # (17, 25) --> (17, 256)
+        ss1 = self.static1(s) 
+        # (17, 200, 48) --> (17, 256, 48)
+        x = self.TB1(x) 
 
-            ss2 = self.static2(s) #(6, 128)
-            x = self.TB2(x) # (6, 1024, 24) input: 1024 + 128
-            s2_r = ss2.unsqueeze(-1).repeat(1, 1, x.size()[-1]) #(6, 128, 24)
-            x = torch.cat((x, s2_r), dim=1) #(6, 1024+128, 24)
-            
-            ss3 = self.static3(s) #(6, 128)
-            x = self.TB3(x) # (6, 1024, 24) input: 1024 + 128
-            s3_r = ss3.unsqueeze(-1).repeat(1, 1, x.size()[-1]) #(6, 128, 24)
-            x = torch.cat((x, s3_r), dim=1) #(6, 1024+128, 24)
+        # (17, 256) --> (17, 256, 48)
+        s1_r = ss1.unsqueeze(-1).repeat(1, 1, x.size()[-1]) 
+        # (17, 256, 48) + (17, 256, 48) --> (17, 512, 48)
+        x = torch.cat((x, s1_r), dim=1) 
+        # (17, 25) --> (17, 256)
+        ss2 = self.static2(s) 
+        # (17, 512, 48) --> (17, 256, 48)
+        x = self.TB2(x) 
 
-            x = self.TB4(x) # (6, 1024, 24) input: 1024 + 128
+        # (17, 256) --> (17, 256, 48)
+        s2_r = ss2.unsqueeze(-1).repeat(1, 1, x.size()[-1]) 
+        # (17, 256, 48) + (17, 256, 48) --> (17, 512, 48)
+        x = torch.cat((x, s2_r), dim=1) 
+         # (17, 25) --> (17, 256)
+        ss3 = self.static3(s) 
+        # (17, 512, 48) --> (17, 256, 48)
+        x = self.TB3(x) 
 
-        x = x.contiguous().transpose(1, 2) #(6, 24, 1024)
-        # s_1 = self.network_1(s_1). # (6, 1024, 24)
-        # s_1 = s_1.contiguous().transpose(1, 2) #(6, 24, 1024)
+        # (17, 256) --> (17, 256, 48)
+        s3_r = ss3.unsqueeze(-1).repeat(1, 1, x.size()[-1]) 
+        # (17, 256, 48) + (17, 256, 48) --> (17, 512, 48)
+        x = torch.cat((x, s3_r), dim=1)
+        # (17, 512, 48) --> (17, 256, 48)
+        x = self.TB4(x) 
+        # (17, 256, 48) --> (17, 48, 256)
+        x = x.contiguous().transpose(1, 2)
 
         # intermediate
-        ss = self.static(s)  #(6, 128)
-        s_2 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) # #(6, 24, 128)
-        x = torch.cat((x, s_2), dim=-1) #(6, 24, 1024+128)
-        x = self.composite(x) #(6, 24, 1)
+        # (17, 25) --> (17, 256)
+        ss = self.static(s)  
+        # (17, 256) --> (17, 48, 256)
+        s_2 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) 
+        # (17, 48, 256) + (17, 48, 256) --> (17, 48, 512)
+        x = torch.cat((x, s_2), dim=-1) 
+        # (17, 48, 512) --> (17, 48, 1)
+        x = self.composite(x) 
 
         # late 
-        # s = self.static(s)  #(6, 128)
-        ss = self.s_composite(s) #(6, 1)
-        s3 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) #(6, 24, 1)
-
-        x = torch.add(x, s3) # (6, 24, 1) 
-        
+        # (17, 25) --> (17, 1)
+        ss = self.s_composite(s) 
+        # (17, 1) --> (17, 48, 1)
+        s3 = ss.unsqueeze(1).repeat(1, x.size()[1], 1) 
+        # (17, 48, 1) + (17, 48, 1) --> (17, 48, 1)
+        x = torch.add(x, s3) 
         return x 
 
 # Transformer models
