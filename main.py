@@ -125,6 +125,7 @@ if __name__ == "__main__":
         test_head, test_static, test_sofa, test_id = utils.filter_sepsis(test_head, test_static, test_sofa, test_id)
 
     input_dim =train_head[0].shape[0]
+    static_dim = train_static[0].shape[0]
 
     if args.static_fusion == 'no_static':
 
@@ -142,27 +143,25 @@ if __name__ == "__main__":
 
     elif args.static_fusion == 'med':
         model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
 
     elif args.static_fusion == 'early':
-        model = models.TemporalConvStaticE(num_inputs=225, num_channels=arg_dict['num_channels'], \
-                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStaticE(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
 
     elif args.static_fusion == 'late':
-        model = models.TemporalConvStaticL(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStaticL(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
     elif args.static_fusion == 'all':
-        model = models.TemporalConvStaticA(num_inputs=225, num_channels=arg_dict['num_channels'], \
-                                            num_static=25, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStaticA(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
 
 
     else:  # inside
-        model = models.TemporalConvStaticI(num_inputs=225, num_channels=arg_dict['num_channels'], num_static=25,
+        model = models.TemporalConvStaticI(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], num_static=static_dim,
                                             kernel_size=args.kernel_size, \
                                             dropout=args.dropout, s_param=arg_dict['s_param'],
-                                            c_param=arg_dict['c_param'], sc_param=arg_dict['sc_param'], \
-                                            use_encode=arg_dict['use_encode'], encode_param=arg_dict['encode_param'],
-                                            fuse_inside=arg_dict['fuse_inside'])
+                                            c_param=arg_dict['c_param'], sc_param=arg_dict['sc_param'])
 
 
     print('Model trainable parameters are: %d' % utils.count_parameters(model))
