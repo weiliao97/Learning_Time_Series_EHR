@@ -40,10 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--regularization", type=str, default = "none", choices = ['none', 'l1' 'l2'])
     parser.add_argument("--l1_strength", type=float, default=0.001, help="L1 regularization lambda")
     parser.add_argument("--l2_strength", type=float, default=0.0001, help="L2 regularization lambda")
-    #  med requires 
-    # late requires
-    # all requires
-    # inside requires 
+   
 
     # model parameters
     # TCN
@@ -76,29 +73,17 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", type=str, default='med_fusion_ks3', help=" name of checkpoint model")
     # Parse and return arguments
     args = parser.parse_args()
-    # device = torch.device("cpu")
-    # log run
+
     arg_dict = vars(args)
-    # deal with num_channels and c_params here
-    # num_channels also used in fc models
-    # arg_dict['num_channels'] = [1024, 1024, 1204, 1024]
-    # for simple fc
-    # arg_dict['num_channels'] = [128]
-    # arg_dict['c_params'] = [1024, 1024, 0.2]
-    # arg_dict['encode_params'] = [182, 0.2]
 
     # for fusion all
     arg_dict['num_channels'] = [256, 256, 256, 256]
     arg_dict['s_param'] = [256, 256, 256, 0.2]
     arg_dict['c_param'] = [256, 256, 0.2]
     arg_dict['sc_param'] = [256, 256, 256, 0.2]
-    arg_dict['use_encode'] = False
-    arg_dict['fuse_inside'] = True
-    arg_dict['encode_param'] = [128, 128, 128, 0.2]
 
-    # log params
-    # run['parameters'] = arg_dict
-    workname = date + '_' + args.database + '_' + args.model_name + args.checkpoint
+  
+    workname = date + '_' + args.database + '_' + args.model_name + '_' + args.checkpoint
     utils.creat_checkpoint_folder('./checkpoints/' + workname, 'params.json', arg_dict)
 
     # load_data
