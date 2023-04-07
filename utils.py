@@ -28,39 +28,10 @@ def get_eval_results(args, model, test_loader):
     loss_val = []
     with torch.no_grad():  # validation does not require gradient
 
-        for test_dl in test_loader:
-            if len(test_dl) ==3: 
-                vitals, target, key_mask = test_dl
-                if args.model_name == 'TCN':
-                    sofap_t = model(vitals.to(device))
-                elif args.model_name == 'RNN':
-                    # x_lengths have to be a 1d tensor 
-                    td_transpose = vitals.to(device).transpose(1, 2)
-                    x_lengths = torch.LongTensor([len(key_mask[i][key_mask[i] == 0]) for i in range(key_mask.shape[0])])
-                    sofap_t = model(td_transpose, x_lengths)
-                elif args.model_name == 'Transformer':
-                    tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                    sofap_t = model(vitals.to(device), tgt_mask, key_mask.to(device))
-
-            elif len(test_dl) ==4: 
-                vitals, target, test_ids, key_mask = test_dl
-                sofap_t = model(vitals.to(device))
-                # for read static model 
-                # vitals, static, target, key_mask = test_dl 
-                # sofap_t = model(vitals.to(device), static.to(device))
-                        
+        for vitals, static, target, _, key_mask  in test_loader:
             
-            # ti_test = Variable(torch.FloatTensor(ti)).to(device)
-            # td_test = Variable(torch.FloatTensor(vitals)).to(device)
-            # sofa_t = Variable(torch.FloatTensor(target)).to(device)
+            sofap_t = model(vitals.to(device), static.to(device))
 
-            # tgt_mask_test = model.get_tgt_mask(td_test.shape[-1]).to(device)
-            # sofap_t = model(td_test, tgt_mask_test, key_mask.to(device))
-            else:
-                vitals, static, target, test_ids, key_mask = test_dl 
-                sofap_t = model(vitals.to(device), static.to(device))
-
-            
             loss_v = loss_fn.mse_maskloss(sofap_t, target.to(device), key_mask.to(device))
             y_list.append([target[i][key_mask[i]==0].detach().numpy() for i in range(len(target))])
             y_pred_list.append([sofap_t[i][key_mask[i]==0].cpu().detach().numpy() for i in range(len(target))])
