@@ -115,6 +115,7 @@ class TemporalConvStatic(nn.Module):
         )
 
         self.network = nn.Sequential(*layers)
+        
         self.composite = nn.Sequential(
         nn.Linear(128+num_channels[-1], 128),
         nn.ReLU(),
@@ -409,14 +410,15 @@ class TemporalConvStaticI(nn.Module):
         self.TB3 = layers[2]
         self.TB4 = layers[3]
 
+        # fusion at 
         s1_layers = []
+        # [256, 256, 256, 0.2]
         for i in range(len(s_param) - 2):
             static_in = num_static if i == 0 else s_param[i-1]
             s1_layers += [nn.Linear(static_in, s_param[i])]
             s1_layers += [nn.ReLU()]
             s1_layers += [nn.Dropout(s_param[-1])]
         s1_layers += [nn.Linear(s_param[-3], s_param[-2])]
-
         self.static1 = nn.Sequential(*s1_layers)
 
         s2_layers = []
@@ -450,7 +452,9 @@ class TemporalConvStaticI(nn.Module):
 
         self.static = nn.Sequential(*s_layers)
 
+        
         c_layers = []
+        # [256, 256, 0.2] 
         for i in range(len(c_param) - 1):
             composite_in = num_channels[-1]+s_param[-2] if i == 0 else c_param[i-1]
             c_layers += [nn.Linear(composite_in, c_param[i])]
@@ -461,6 +465,7 @@ class TemporalConvStaticI(nn.Module):
         self.composite = nn.Sequential(*c_layers)
 
         sc_layers = []
+        # [256, 256, 256, 0.2]
         for i in range(len(sc_param) - 2):
             s_composite_in = num_static if i == 0 else sc_param[i-1]
             sc_layers += [nn.Linear(s_composite_in, sc_param[i])]
@@ -472,35 +477,39 @@ class TemporalConvStaticI(nn.Module):
         self.s_composite = nn.Sequential(*sc_layers)
 
     def forward(self, x, s):
+        # Fusion at I
         # early  (17, 25) --> (17, 25, 48)
         s_1= s.unsqueeze(-1).repeat(1, 1, x.size()[2]) 
         # (17, 25, 48) + (17, 200, 48) --> (17, 225, 48)
         x = torch.cat((x, s_1), dim=1) 
 
         # start all level fusion 
-        # (17, 25) --> (17, 256)
-        ss1 = self.static1(s) 
         # (17, 200, 48) --> (17, 256, 48)
         x = self.TB1(x) 
 
+        # Fusion at II 
+        # (17, 25) --> (17, 256)
+        ss1 = self.static1(s) 
         # (17, 256) --> (17, 256, 48)
         s1_r = ss1.unsqueeze(-1).repeat(1, 1, x.size()[-1]) 
         # (17, 256, 48) + (17, 256, 48) --> (17, 512, 48)
         x = torch.cat((x, s1_r), dim=1) 
-        # (17, 25) --> (17, 256)
-        ss2 = self.static2(s) 
         # (17, 512, 48) --> (17, 256, 48)
         x = self.TB2(x) 
 
+        # Fusion at III
+        # (17, 25) --> (17, 256)
+        ss2 = self.static2(s) 
         # (17, 256) --> (17, 256, 48)
         s2_r = ss2.unsqueeze(-1).repeat(1, 1, x.size()[-1]) 
         # (17, 256, 48) + (17, 256, 48) --> (17, 512, 48)
         x = torch.cat((x, s2_r), dim=1) 
-         # (17, 25) --> (17, 256)
-        ss3 = self.static3(s) 
         # (17, 512, 48) --> (17, 256, 48)
         x = self.TB3(x) 
 
+        # Fusion at IV
+        # (17, 25) --> (17, 256)
+        ss3 = self.static3(s) 
         # (17, 256) --> (17, 256, 48)
         s3_r = ss3.unsqueeze(-1).repeat(1, 1, x.size()[-1]) 
         # (17, 256, 48) + (17, 256, 48) --> (17, 512, 48)
@@ -510,7 +519,7 @@ class TemporalConvStaticI(nn.Module):
         # (17, 256, 48) --> (17, 48, 256)
         x = x.contiguous().transpose(1, 2)
 
-        # intermediate
+        # Fusion at V
         # (17, 25) --> (17, 256)
         ss = self.static(s)  
         # (17, 256) --> (17, 48, 256)
@@ -520,7 +529,7 @@ class TemporalConvStaticI(nn.Module):
         # (17, 48, 512) --> (17, 48, 1)
         x = self.composite(x) 
 
-        # late 
+        # Fusion at VI
         # (17, 25) --> (17, 1)
         ss = self.s_composite(s) 
         # (17, 1) --> (17, 48, 1)
