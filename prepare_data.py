@@ -124,9 +124,7 @@ def col_fn(batchdata):
     mask = [np.pad(len_tem[i], pad_width=((0, max_len-batchdata[i][0].shape[-1])), \
             mode='constant', constant_values=1) for i in range(len_data)]
         
-    return torch.from_numpy(np.stack(padded_td)), torch.from_numpy(np.stack(static)), 
-            torch.from_numpy(np.asarray(padded_label)), torch.from_numpy(np.asarray(stayids)), 
-            torch.from_numpy(np.stack(mask))
+    return torch.from_numpy(np.stack(padded_td)), torch.from_numpy(np.stack(static)), torch.from_numpy(np.asarray(padded_label)), torch.from_numpy(np.asarray(stayids)), torch.from_numpy(np.stack(mask))
 
 def generate_buckets(bs, train_hist):
     """
