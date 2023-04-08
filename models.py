@@ -437,10 +437,12 @@ class TemporalConvStaticA(nn.Module):
         x = self.composite(x)
 
         # late 
-        # (17, 48, 128) --> (17, 48, 1)
-        s3 = self.s_composite(s_2) 
+        # (17, 25) --> (17, 1)
+        s3 = self.s_composite(s) 
+        # (17, 1) --> (17, 48, 1)
+        s4 = s3.unsqueeze(1).repeat(1, x.size()[1], 1) 
         # (17, 48, 1) + (17, 48, 1) --> (17, 48, 1)
-        x = torch.add(x, s3) 
+        x = torch.add(x, s4) 
         
         return x 
 
