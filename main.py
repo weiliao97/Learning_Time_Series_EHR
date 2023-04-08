@@ -36,6 +36,11 @@ if __name__ == "__main__":
     # how to fuse with transformer models and LSTM models is still pending
     parser.add_argument("--static_fusion", type=str, default='med',
                         choices=['no_static', 'early', 'med', 'late', 'all', 'inside'])
+
+    parser.add_argument('--s_param', nargs='+', help='Fusion II, III, IV, V params')
+    parser.add_argument('--c_param', nargs='+', help='Main model FC params')
+    parser.add_argument('--sc_param', nargs='+', help='Fusion VI params')
+   
     # regularization 
     parser.add_argument("--regularization", type=str, default = "none", choices = ['none', 'l1' 'l2'])
     parser.add_argument("--l1_strength", type=float, default=0.001, help="L1 regularization lambda")
@@ -47,7 +52,7 @@ if __name__ == "__main__":
     parser.add_argument("--kernel_size", type=int, default=3, help="Dimension of the model")
     parser.add_argument("--dropout", type=float, default=0.2, help="Model dropout")
     parser.add_argument("--reluslope", type=float, default=0.1, help="Relu slope in the fc model")
-    parser.add_argument('--num_channels', nargs='+', help='<Required> Set flag')
+    parser.add_argument('--num_channels', nargs='+', help='TCN model channels')
 
     # LSTM
     parser.add_argument("--rnn_type", type=str, default='lstm', choices=['rnn', 'lstm', 'gru'])
@@ -74,13 +79,13 @@ if __name__ == "__main__":
     # Parse and return arguments
     args = parser.parse_args()
 
-    arg_dict = vars(args)
+    # arg_dict = vars(args)
 
-    # for fusion all
-    arg_dict['num_channels'] = [256, 256, 256, 256]
-    arg_dict['s_param'] = [256, 256, 256, 0.2]
-    arg_dict['c_param'] = [256, 256, 0.2]
-    arg_dict['sc_param'] = [256, 256, 256, 0.2]
+    # # for fusion all
+    # arg_dict['num_channels'] = [256, 256, 256, 256]
+    # arg_dict['s_param'] = [256, 256, 256, 0.2]
+    # arg_dict['c_param'] = [256, 256, 0.2]
+    # arg_dict['sc_param'] = [256, 256, 256, 0.2]
 
   
     workname = date + '_' + args.database + '_' + args.model_name + '_' + args.checkpoint
@@ -115,7 +120,7 @@ if __name__ == "__main__":
     if args.static_fusion == 'no_static':
 
         if args.model_name == 'TCN':
-            model = models.TemporalConv(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
+            model = models.TemporalConv(num_inputs=input_dim, num_channels=args.num_channels,
                                         kernel_size=args.kernel_size, dropout=args.dropout)
         elif args.model_name == 'RNN':
             model = models.RecurrentModel(cell=args.rnn_type, input_dim = input_dim, hidden_dim=args.hidden_dim, layer_dim=args.layer_dim, \
@@ -127,26 +132,29 @@ if __name__ == "__main__":
                   nlayers=args.num_enc_layer, out_dim=1, dropout=args.dropout)
 
     elif args.static_fusion == 'med':
-        model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=arg_dict['num_channels'], \
-                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStatic(num_inputs=input_dim, num_channels=args.num_channels, \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout, 
+                                            s_param=args.s_param, c_param=args.c_param)
 
     elif args.static_fusion == 'early':
-        model = models.TemporalConvStaticE(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], \
-                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStaticE(num_inputs=input_dim + static_dim, num_channels=args.num_channels, \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout,
+                                            c_param=args.c_param)
 
     elif args.static_fusion == 'late':
-        model = models.TemporalConvStaticL(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], \
-                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStaticL(num_inputs=input_dim + static_dim, num_channels=args.num_channels, \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout,
+                                            c_param=args.c_param, sc_param=args.sc_param)
     elif args.static_fusion == 'all':
-        model = models.TemporalConvStaticA(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], \
-                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout)
+        model = models.TemporalConvStaticA(num_inputs=input_dim + static_dim, num_channels=args.num_channels, \
+                                            num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout,
+                                            s_param = args.s_param, c_param=args.c_param, sc_param=args.sc_param)
 
 
     else:  # inside
-        model = models.TemporalConvStaticI(num_inputs=input_dim + static_dim, num_channels=arg_dict['num_channels'], num_static=static_dim,
-                                            kernel_size=args.kernel_size, \
-                                            dropout=args.dropout, s_param=arg_dict['s_param'],
-                                            c_param=arg_dict['c_param'], sc_param=arg_dict['sc_param'])
+        model = models.TemporalConvStaticI(num_inputs=input_dim + static_dim, num_channels=args.num_channels, num_static=static_dim,
+                                            kernel_size=args.kernel_size, dropout=args.dropout, 
+                                            s_param = args.s_param, c_param=args.c_param, sc_param=args.sc_param)
 
 
     print('Model trainable parameters are: %d' % utils.count_parameters(model))

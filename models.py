@@ -60,7 +60,7 @@ class TemporalBlock(nn.Module):
 
 
 class TemporalConv(nn.Module):
-    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels=[256, 256, 256, 256], kernel_size=2, dropout=0.2):
         super(TemporalConv, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -88,9 +88,9 @@ class TemporalConv(nn.Module):
         x = self.linear(x)
         return x
 
-# fusion at I 
+# fusion at V 
 class TemporalConvStatic(nn.Module):
-    def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels=[256, 256, 256, 256], num_static=25, kernel_size=2, dropout=0.2, s_param=[256, 256, 256, 0.2], c_param =[256, 256, 0.2]):
         super(TemporalConvStatic, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -101,43 +101,41 @@ class TemporalConvStatic(nn.Module):
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
                                      padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
-        # 
-        self.static = nn.Sequential(
-        nn.Linear(num_static, 128),
-        # nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        # nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128)
-        )
+        s_layers = []
+        # s_params = [256, 256, 256, 0.2]
+        for i in range(len(s_param) - 2):
+            static_in = num_static if i == 0 else s_param[i-1]
+            s_layers += [nn.Linear(static_in, s_param[i])]
+            s_layers += [nn.ReLU()]
+            s_layers += [nn.Dropout(s_param[-1])]
+        s_layers += [nn.Linear(s_param[-3], s_param[-2])]
+        self.static = nn.Sequential(*s_layers)
 
         self.network = nn.Sequential(*layers)
         
-        self.composite = nn.Sequential(
-        nn.Linear(128+num_channels[-1], 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 1),
-        )
+        c_layers = []
+        # [256, 256, 0.2] 
+        for i in range(len(c_param) - 1):
+            composite_in = num_channels[-1]+s_param[-2] if i == 0 else c_param[i-1]
+            c_layers += [nn.Linear(composite_in, c_param[i])]
+            c_layers += [nn.ReLU()]
+            c_layers += [nn.Dropout(c_param[-1])]
+
+        c_layers += [nn.Linear(c_param[-2], 1)]
+        self.composite = nn.Sequential(*c_layers)
 
     def forward(self, x, s):
         # (17, 200, 48) --> (17, 256, 48)
         x = self.network(x)
         # (17, 256, 48) --> (17, 48, 256)
         x = x.contiguous().transpose(1, 2)
-        # (17, 25) --> (17, 128)
+        # (17, 25) --> (17, 256)
         s = self.static(s) 
-        # (17, 128) --> (17, 48, 128)
+        # (17, 256) --> (17, 48, 256)
         s = s.unsqueeze(1).repeat(1, x.size()[1], 1)
-        # (17, 48, 256) + (17, 48, 128) --> (17, 48, 384)
+        # (17, 48, 256) + (17, 48, 256) --> (17, 48, 512)
         x = torch.cat((x, s), dim=-1)
-        # (17, 48, 384) --> (17, 48, 1)
+        # (17, 48, 512) --> (17, 48, 1)
         x = self.composite(x)
         return x 
 
@@ -213,7 +211,7 @@ class TemporalConvStatic(nn.Module):
 
 # Early fusion at I 
 class TemporalConvStaticE(nn.Module):
-    def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels=[256, 256, 256, 256], num_static=25, kernel_size=2, dropout=0.2, c_param=[256, 256, 0.2]):
         super(TemporalConvStaticE, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -225,15 +223,17 @@ class TemporalConvStaticE(nn.Module):
                                      padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
         self.network = nn.Sequential(*layers)
-        self.composite = nn.Sequential(
-        nn.Linear(num_channels[-1], 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 1)
-        )
+
+        c_layers = []
+        # [256, 256, 0.2] 
+        for i in range(len(c_param) - 1):
+            composite_in = num_channels[-1] if i == 0 else c_param[i-1]
+            c_layers += [nn.Linear(composite_in, c_param[i])]
+            c_layers += [nn.ReLU()]
+            c_layers += [nn.Dropout(c_param[-1])]
+
+        c_layers += [nn.Linear(c_param[-2], 1)]
+        self.composite = nn.Sequential(*c_layers)
 
     def forward(self, x, s):
         # x (17, 200, 48)
@@ -249,7 +249,7 @@ class TemporalConvStaticE(nn.Module):
 
 # Late fusion at VI
 class TemporalConvStaticL(nn.Module):
-    def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels=[256, 256, 256, 256], num_static=25, kernel_size=2, dropout=0.2, c_param=[256, 256, 0.2], sc_param=[256, 256, 256, 0.2]):
         super(TemporalConvStaticL, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -262,37 +262,60 @@ class TemporalConvStaticL(nn.Module):
 
         self.network = nn.Sequential(*layers)
 
-        self.static = nn.Sequential(
-        nn.Linear(num_static, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128)
-        )
+        # self.static = nn.Sequential(
+        # nn.Linear(num_static, 128),
+        # nn.BatchNorm1d(128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 128),
+        # nn.BatchNorm1d(128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 128)
+        # )
 
-        self.composite = nn.Sequential(
-        nn.Linear(num_channels[-1], 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 1)
-        )
+        # self.composite = nn.Sequential(
+        # nn.Linear(num_channels[-1], 128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 1)
+        # )
 
-        self.s_composite = nn.Sequential(
-        nn.Linear(128, 64),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(64, 32),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(32, 1)
-        )
+        # self.s_composite = nn.Sequential(
+        # nn.Linear(128, 64),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(64, 32),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(32, 1)
+        # )
+
+        c_layers = []
+        # [256, 256, 0.2] 
+        for i in range(len(c_param) - 1):
+            composite_in = num_channels[-1] if i == 0 else c_param[i-1]
+            c_layers += [nn.Linear(composite_in, c_param[i])]
+            c_layers += [nn.ReLU()]
+            c_layers += [nn.Dropout(c_param[-1])]
+
+        c_layers += [nn.Linear(c_param[-2], 1)]
+        self.composite = nn.Sequential(*c_layers)
+
+        sc_layers = []
+        # [256, 256, 256, 0.2]
+        for i in range(len(sc_param) - 2):
+            s_composite_in = num_static if i == 0 else sc_param[i-1]
+            sc_layers += [nn.Linear(s_composite_in, sc_param[i])]
+            sc_layers += [nn.ReLU()]
+            sc_layers += [nn.Dropout(sc_param[-1])]
+
+        sc_layers += [nn.Linear(sc_param[-2], 1)]
+
+        self.s_composite = nn.Sequential(*sc_layers)
 
     def forward(self, x, s):
 
@@ -302,19 +325,17 @@ class TemporalConvStaticL(nn.Module):
         # (17, 48, 256) --> (17, 48, 128)
         x = self.composite(x)
         
-        # (17, 25) -->  (17, 128)
-        s = self.static(s)
-        # (17, 128)  --> (17, 48, 128)
-        s = s.unsqueeze(1).repeat(1, x.size()[1], 1)
-        # (17, 48, 128) --> (17, 48, 1)
-        s = self.s_composite(s)
-
-        x = torch.add(x, s)
+        # (17, 25) --> (17, 1)
+        s = self.s_composite(s) 
+        # (17, 1) --> (17, 48, 1)
+        s = s.unsqueeze(1).repeat(1, x.size()[1], 1) 
+        # (17, 48, 1) + (17, 48, 1) --> (17, 48, 1)
+        x = torch.add(x, s) 
         
         return x 
 
 class TemporalConvStaticA(nn.Module):
-    def __init__(self, num_inputs, num_channels, num_static, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels=[256, 256, 256, 256], num_static=25, kernel_size=2, dropout=0.2, s_param =[256, 256, 256, 0.2], c_param =[256, 256, 0.2], sc_param =[256, 256, 256, 0.2]):
         super(TemporalConvStaticA, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -327,37 +348,71 @@ class TemporalConvStaticA(nn.Module):
 
         self.network = nn.Sequential(*layers)
 
-        self.static = nn.Sequential(
-        nn.Linear(num_static, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128)
-        )
+        # self.static = nn.Sequential(
+        # nn.Linear(num_static, 128),
+        # nn.BatchNorm1d(128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 128),
+        # nn.BatchNorm1d(128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 128)
+        # )
 
-        self.composite = nn.Sequential(
-        nn.Linear(num_channels[-1]+128, 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 128),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(128, 1)
-        )
+        # self.composite = nn.Sequential(
+        # nn.Linear(num_channels[-1]+128, 128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 128),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(128, 1)
+        # )
 
-        self.s_composite = nn.Sequential(
-        nn.Linear(128, 64),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(64, 32),
-        nn.ReLU(),
-        nn.Dropout(0.2),
-        nn.Linear(32, 1)
-        )
+        # self.s_composite = nn.Sequential(
+        # nn.Linear(128, 64),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(64, 32),
+        # nn.ReLU(),
+        # nn.Dropout(0.2),
+        # nn.Linear(32, 1)
+        # )
+
+        s_layers = []
+        for i in range(len(s_param) - 2):
+            static_in = num_static if i == 0 else s_param[i-1]
+            s_layers += [nn.Linear(static_in, s_param[i])]
+            s_layers += [nn.ReLU()]
+            s_layers += [nn.Dropout(s_param[-1])]
+        s_layers += [nn.Linear(s_param[-3], s_param[-2])]
+
+        self.static = nn.Sequential(*s_layers)
+
+        
+        c_layers = []
+        # [256, 256, 0.2] 
+        for i in range(len(c_param) - 1):
+            composite_in = num_channels[-1]+s_param[-2] if i == 0 else c_param[i-1]
+            c_layers += [nn.Linear(composite_in, c_param[i])]
+            c_layers += [nn.ReLU()]
+            c_layers += [nn.Dropout(c_param[-1])]
+
+        c_layers += [nn.Linear(c_param[-2], 1)]
+        self.composite = nn.Sequential(*c_layers)
+
+        sc_layers = []
+        # [256, 256, 256, 0.2]
+        for i in range(len(sc_param) - 2):
+            s_composite_in = num_static if i == 0 else sc_param[i-1]
+            sc_layers += [nn.Linear(s_composite_in, sc_param[i])]
+            sc_layers += [nn.ReLU()]
+            sc_layers += [nn.Dropout(sc_param[-1])]
+
+        sc_layers += [nn.Linear(sc_param[-2], 1)]
+
+        self.s_composite = nn.Sequential(*sc_layers)
 
     def forward(self, x, s):
 
@@ -390,7 +445,7 @@ class TemporalConvStaticA(nn.Module):
         return x 
 
 class TemporalConvStaticI(nn.Module):
-    def __init__(self, num_inputs, num_channels,  num_static, kernel_size, dropout, s_param, c_param, sc_param):
+    def __init__(self, num_inputs, num_channels=[256, 256, 256, 256],  num_static=25, kernel_size=3, dropout=0.2, s_param=[256, 256, 256, 0.2], c_param=[256, 256, 0.2], sc_param=[256, 256, 256, 0.2]):
         super(TemporalConvStaticI, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -410,7 +465,7 @@ class TemporalConvStaticI(nn.Module):
         self.TB3 = layers[2]
         self.TB4 = layers[3]
 
-        # fusion at 
+        
         s1_layers = []
         # [256, 256, 256, 0.2]
         for i in range(len(s_param) - 2):
