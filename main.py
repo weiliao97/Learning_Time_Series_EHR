@@ -100,14 +100,14 @@ if __name__ == "__main__":
         '/content/drive/MyDrive/ColabNotebooks/MIMIC/Extract/MEEP/Extracted_sep_2022/0910/MIMIC_target_0922_2022.npy', \
         allow_pickle=True).item()
 
-    train_head, train_static, train_sofa, train_id = utils.crop_data_target(train_vital, mimic_target, mimic_static, 'train')
-    dev_head, dev_static, dev_sofa, dev_id = utils.crop_data_target(dev_vital, mimic_target, mimic_static, 'dev')
-    test_head, test_static, test_sofa, test_id = utils.crop_data_target(test_vital, mimic_target, mimic_static, 'test')
+    train_head, train_static, train_sofa, train_id = utils.crop_data_target(args.database, train_vital, mimic_target, mimic_static, 'train')
+    dev_head, dev_static, dev_sofa, dev_id = utils.crop_data_target(args.database, dev_vital, mimic_target, mimic_static, 'dev')
+    test_head, test_static, test_sofa, test_id = utils.crop_data_target(args.database, test_vital, mimic_target, mimic_static, 'test')
 
     if args.use_sepsis3 == True:
-        train_head, train_static, train_sofa, train_id = utils.filter_sepsis(train_head, train_static, train_sofa, train_id)
-        dev_head, dev_static, dev_sofa, dev_id = utils.filter_sepsis(dev_head, dev_static, dev_sofa, dev_id)
-        test_head, test_static, test_sofa, test_id = utils.filter_sepsis(test_head, test_static, test_sofa, test_id)
+        train_head, train_static, train_sofa, train_id = utils.filter_sepsis(args.database, train_head, train_static, train_sofa, train_id)
+        dev_head, dev_static, dev_sofa, dev_id = utils.filter_sepsis(args.database, dev_head, dev_static, dev_sofa, dev_id)
+        test_head, test_static, test_sofa, test_id = utils.filter_sepsis(args.database, test_head, test_static, test_sofa, test_id)
 
     input_dim =train_head[0].shape[0]
     static_dim = train_static[0].shape[0]
