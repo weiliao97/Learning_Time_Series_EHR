@@ -27,100 +27,10 @@ date = today.strftime("%m%d")
 kf = KFold(n_splits=10, random_state=42, shuffle=True)
 f_sm = nn.Softmax(dim=1)
 
-# count model trainable params
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-# make dir and write json files
-def write_json(target_path, target_file, data):
-    if not os.path.exists(target_path):
-        try:
-            os.makedirs(target_path)
-        except Exception as e:
-            print(e)
-            raise
-    with open(os.path.join(target_path, target_file), 'w') as f:
-        json.dump(data, f)
-
-# combine train and val and based on the cross validation index, redistribute train and val
-def get_cv_data(train_data, dev_data, train_target, dev_target, train_index, dev_index):
-    trainval_head = train_data + dev_data
-    trainval_static = np.concatenate((train_target, dev_target), axis=0)
-    train_cv = [trainval_head[i] for i in train_index]
-    train_cvl = [trainval_static[i] for i in train_index]
-    dev_cv = [trainval_head[i] for i in dev_index]
-    dev_cvl = [trainval_static[i] for i in dev_index]
-    return train_cv, dev_cv, np.asarray(train_cvl), np.asarray(dev_cvl)
-
-# calcuate accuracy
-def cal_acc(pred, label):
-    pred_t = torch.concat(pred)
-    prediction = torch.argmax(pred_t, dim=-1).unsqueeze(-1)
-    label_t = torch.concat(label)
-    acc = (prediction == label_t).sum() / len(pred_t)
-    return acc
-
-# calcualte accuracy for positive classes
-def cal_pos_acc(pred, label, pos_ind):
-    pred_t = torch.concat(pred)
-    prediction = torch.argmax(pred_t, dim=-1).unsqueeze(-1)
-    label_t = torch.concat(label)
-    # positive index
-    ind = [i for i in range(len(pred_t)) if label_t[i] == pos_ind]
-    acc = (prediction[ind] == label_t[ind]).sum() / len(ind)
-    return acc
-
-# filter ICU stays based on LOS needed: 48+6, 4+6, 12+6
-def filter_los(static_data, vitals_data, thresh, gap):
-    # (200, 80)
-    los = [i.shape[1] for i in vitals_data]
-    ind = [i for i in range(len(los)) if los[i] >= (thresh + gap) and np.isnan(static_data[i, 0]) == False]
-    vitals_reduce = [vitals_data[i][:, :thresh] for i in ind]
-    static_data = static_data[ind]
-    return static_data, vitals_reduce
-
-# filter for the ARF task
-def filter_arf(args, vital):
-    vital_reduce = []
-    target = []
-    for i in range(len(vital)):
-        arf_flag = np.where(vital[i][184, :] == 1)[0]
-        peep_flag = np.union1d(np.where(vital[i][157, :] == 1)[0], np.where(vital[i][159, :] == 1)[0])
-        if len(arf_flag) == 0:
-            if len(peep_flag) > 0:
-                if peep_flag[0] >= (args.thresh + args.gap):
-                    vital_reduce.append(vital[i][:, :args.thresh])
-                    target.append(1)
-            else:
-                vital_reduce.append(vital[i][:, :args.thresh])
-                target.append(0)
-        elif len(arf_flag) > 0:
-            if arf_flag[0] >= (args.thresh + args.gap):
-                if (len(peep_flag) > 0 and peep_flag[0] >= (args.thresh + args.gap)) or len(peep_flag) == 0:
-                    vital_reduce.append(vital[i][:, :args.thresh])
-                    target.append(1)
-    return vital_reduce, np.asarray(target)
-
-# filter for the shock prediction task
-def filter_shock(args, vital):
-    vital_reduce = []
-    target = []
-    for i in range(len(vital)):
-        shock_flag = np.where(vital[i][186:191].sum(axis=0) >= 1)[0]
-        if len(shock_flag) == 0:
-            vital_reduce.append(vital[i][:, :args.thresh])
-            target.append(0)
-        elif len(shock_flag) > 0:
-            if shock_flag[0] >= (args.thresh + args.gap):
-                vital_reduce.append(vital[i][:, :args.thresh])
-                target.append(1)
-    return vital_reduce, np.asarray(target)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parser for Tranformer models")
 
     parser.add_argument("--dataset_path", type=str, help="path to the dataset")
-    parser.add_argument("--dataset_path_cv", type=str, help="path to the dataset")
     parser.add_argument("--model_name", type=str, default='TCN', choices=['Trans', 'TCN', 'RNN'])
     parser.add_argument("--rnn_type", type=str, default='lstm', choices=['rnn', 'lstm', 'gru'])
 
@@ -179,71 +89,22 @@ if __name__ == "__main__":
     s_train = np.stack(static_train_filter, axis=0)
     s_dev = np.stack(static_dev_filter, axis=0)
     s_test = np.stack(static_test_filter, axis=0)
-    # load cross validation data from the other database
-    data_label = np.load(args.dataset_path_cv, allow_pickle=True).item()
-    etrain_head = data_label['train_head']
-    estatic_train_filter = data_label['static_train_filter']
-    edev_head = data_label['dev_head']
-    estatic_dev_filter = data_label['static_dev_filter']
-    etest_head = data_label['test_head']
-    estatic_test_filter = data_label['static_test_filter']
-    es_train = np.stack(estatic_train_filter, axis=0)
-    es_dev = np.stack(estatic_dev_filter, axis=0)
-    es_test = np.stack(estatic_test_filter, axis=0)
 
     print('Running target %d, thresh %d, gap %d, model %s' % (args.target_index, args.thresh, args.gap, args.model_name))
     workname = date + '_%s' % task_map[args.target_index] + '_%dh' % args.thresh + '_%sh' % args.gap + '_%s' % (args.model_name.lower())
     print(workname)
     args.checkpoint_model = workname
-    if args.target_index == 0 and args.filter_los:
-        print('Before filtering, train size is %d' % (len(train_head)))
-        train_label, train_data = filter_los(s_train, train_head, args.thresh, args.gap)
-        dev_label, dev_data = filter_los(s_dev, dev_head, args.thresh, args.gap)
-        test_label, test_data = filter_los(s_test, test_head, args.thresh, args.gap)
-        print('After filtering, train size is %d' % (len(train_data)))
-        train_label = train_label[:, 0]
-        dev_label = dev_label[:, 0]
-        test_label = test_label[:, 0]
 
-    if args.target_index == 1:  # arf
-        print('Before filtering, train size is %d' % (len(train_head)))
-        train_data, train_label = filter_arf(args, train_head)
-        dev_data, dev_label = filter_arf(args, dev_head)
-        test_data, test_label = filter_arf(args, test_head)
-        print('After filtering, train size is %d' % (len(train_data)))
-
-    if args.target_index == 2:  # shock
-        print('Before filtering, train size is %d' % (len(train_head)))
-        train_data, train_label = filter_shock(args, train_head)
-        dev_data, dev_label = filter_shock(args, dev_head)
-        test_data, test_label = filter_shock(args, test_head)
-        print('After filtering, train size is %d' % (len(train_data)))
+    print('Before filtering, train size is %d' % (len(train_head)))
+    train_label, train_data = utils.filter_los(s_train, train_head, args.thresh, args.gap)
+    dev_label, dev_data = utils.filter_los(s_dev, dev_head, args.thresh, args.gap)
+    test_label, test_data = utils.filter_los(s_test, test_head, args.thresh, args.gap)
+    print('After filtering, train size is %d' % (len(train_data)))
+    train_label = train_label[:, 0]
+    dev_label = dev_label[:, 0]
+    test_label = test_label[:, 0]
 
     trainval_data = train_data + dev_data
-
-    # for cross validation
-    if args.target_index == 0 and args.filter_los:
-        print('Before filtering, train size is %d' % (len(etrain_head)))
-        es_train1, etrain_data = filter_los(es_train, etrain_head, args.thresh, args.gap)
-        es_dev1, edev_data = filter_los(es_dev, edev_head, args.thresh, args.gap)
-        es_test1, etest_data = filter_los(es_test, etest_head, args.thresh, args.gap)
-        print('After filtering, train size is %d' % (len(etrain_data)))
-        etrain_label = es_train1[:, 0]
-        edev_label = es_dev1[:, 0]
-        etest_label = es_test1[:, 0]
-
-    elif args.target_index == 1:
-        etrain_data, etrain_label = filter_arf(args, etrain_head)
-        edev_data, edev_label = filter_arf(args, edev_head)
-        etest_data, etest_label = filter_arf(args, etest_head)
-
-    elif args.target_index == 2:
-        etrain_data, etrain_label = filter_shock(args, etrain_head)
-        edev_data, edev_label = filter_shock(args, edev_head)
-        etest_data, etest_label = filter_shock(args, etest_head)
-
-    crossval_head = etrain_data + edev_data + etest_data
-    crossval_target = np.concatenate((etrain_label, edev_label, etest_label), axis=0)
 
     # result_dict to log and save data
     result_dict = {}
@@ -255,7 +116,7 @@ if __name__ == "__main__":
                                     output_class=args.output_classes)
         torch.save(model.state_dict(), '/content/start_weights.pt')
         print('Saving Initial Weights')
-        print("Trainable params in TCN is %d" % count_parameters(model))
+        print("Trainable params in TCN is %d" % utils.count_parameters(model))
     elif args.model_name == 'RNN':
         model = models.RecurrentModel(cell=args.rnn_type, hidden_dim=args.hidden_dim,
                                       layer_dim=args.layer_dim, \
@@ -264,7 +125,7 @@ if __name__ == "__main__":
 
         torch.save(model.state_dict(), '/content/start_weights.pt')
         print('Saving Initial Weights')
-        print("Trainable params in RNN is %d" % count_parameters(model))
+        print("Trainable params in RNN is %d" % utils.count_parameters(model))
 
     else:
         model = models.Trans_encoder(feature_dim=200, d_model=args.d_model, \
@@ -272,7 +133,7 @@ if __name__ == "__main__":
                                      nlayers=args.num_enc_layer, out_dim=args.output_classes, dropout=args.dropout)
         torch.save(model.state_dict(), '/content/start_weights.pt')
         print('Saving Initial Weights')
-        print("Trainable params in RNN is %d" % count_parameters(model))
+        print("Trainable params in RNN is %d" % utils.count_parameters(model))
 
     model.to(device)
     best_loss = 1e4
@@ -301,7 +162,7 @@ if __name__ == "__main__":
         print('Starting Fold %d' % c_fold)
         print("TRAIN:", len(train_index), "TEST:", len(test_index))
 
-        train_cv, dev_cv, train_labelcv, dev_labelcv = get_cv_data(train_data, dev_data, train_label, dev_label, train_index, test_index)
+        train_cv, dev_cv, train_labelcv, dev_labelcv = utils.get_cv_data(train_data, dev_data, train_label, dev_label, train_index, test_index)
         print('Compiled another CV data')
         train_dataloader, dev_dataloader, test_dataloader = prepare_data.get_data_loader( \
             args, train_cv, dev_cv, test_data, train_labelcv, dev_labelcv, test_label)
@@ -355,30 +216,4 @@ if __name__ == "__main__":
                 '(%.3f-%.3f)' % st.t.interval(alpha=0.95, df=len(prc), loc=np.mean(prc), scale=np.std(prc)))
             result_dict['fold%d'%c_fold].append(len(test_label))
 
-            roc = []
-            prc = []
-            for i in tqdm(range(1000)):
-                test_index = np.random.choice(len(crossval_target), 1000)
-                test_i = [crossval_head[i] for i in test_index]
-                test_t = crossval_target[test_index]
-                test_dataloader = prepare_data.get_test_loader(args, test_i, test_t)
-                # test auroc on test set
-                y_list, y_pred_list, td_list, loss_te, val_acc = utils.get_evalacc_results(args, best_model,
-                                                                                           test_dataloader)
-                y_l = torch.concat(y_list).cpu().numpy()
-                y_pred_l = np.concatenate(
-                    [f_sm(y_pred_list[i]).cpu().numpy() for i in range(len(y_pred_list))])
-                test_roc = roc_auc_score(y_l.squeeze(-1), y_pred_l[:, 1])
-                test_prc = average_precision_score(y_l.squeeze(-1), y_pred_l[:, 1])
-                roc.append(test_roc)
-                prc.append(test_prc)
-            # create 95% confidence interval for population mean weight
-            result_dict['fold%d'%c_fold].append('%.3f' % np.mean(roc))
-            result_dict['fold%d'%c_fold].append(
-                '(%.3f-%.3f)' % st.t.interval(alpha=0.95, df=len(roc), loc=np.mean(roc), scale=np.std(roc)))
-            result_dict['fold%d'%c_fold].append('%.3f' % np.mean(prc))
-            result_dict['fold%d'%c_fold].append(
-                '(%.3f-%.3f)' % st.t.interval(alpha=0.95, df=len(prc), loc=np.mean(prc), scale=np.std(prc)))
-            result_dict['fold%d'%c_fold].append(len(crossval_target))
-
-    write_json('./checkpoints', args.checkpoint_model + '.json', result_dict)
+    utils.write_json('./checkpoints', args.checkpoint_model + '.json', result_dict)

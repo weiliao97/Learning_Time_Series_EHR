@@ -14,6 +14,8 @@ import IHM.models as models
 importlib.reload(models)
 importlib.reload(loss_fn)
 import copy
+import os 
+import json 
 
 ce_loss = nn.CrossEntropyLoss()
 softmax = torch.nn.Softmax(dim=1)
@@ -397,6 +399,59 @@ def get_eval_results(model, test_loader):
     loss_te = np.mean(torch.stack(loss_val, dim=0).cpu().detach().numpy())
 
     return y_list, y_pred_list, td_list, loss_te
+
+
+# count model trainable params
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+# make dir and write json files
+def write_json(target_path, target_file, data):
+    if not os.path.exists(target_path):
+        try:
+            os.makedirs(target_path)
+        except Exception as e:
+            print(e)
+            raise
+    with open(os.path.join(target_path, target_file), 'w') as f:
+        json.dump(data, f)
+
+# combine train and val and based on the cross validation index, redistribute train and val
+def get_cv_data(train_data, dev_data, train_target, dev_target, train_index, dev_index):
+    trainval_head = train_data + dev_data
+    trainval_static = np.concatenate((train_target, dev_target), axis=0)
+    train_cv = [trainval_head[i] for i in train_index]
+    train_cvl = [trainval_static[i] for i in train_index]
+    dev_cv = [trainval_head[i] for i in dev_index]
+    dev_cvl = [trainval_static[i] for i in dev_index]
+    return train_cv, dev_cv, np.asarray(train_cvl), np.asarray(dev_cvl)
+
+# calcuate accuracy
+def cal_acc(pred, label):
+    pred_t = torch.concat(pred)
+    prediction = torch.argmax(pred_t, dim=-1).unsqueeze(-1)
+    label_t = torch.concat(label)
+    acc = (prediction == label_t).sum() / len(pred_t)
+    return acc
+
+# calcualte accuracy for positive classes
+def cal_pos_acc(pred, label, pos_ind):
+    pred_t = torch.concat(pred)
+    prediction = torch.argmax(pred_t, dim=-1).unsqueeze(-1)
+    label_t = torch.concat(label)
+    # positive index
+    ind = [i for i in range(len(pred_t)) if label_t[i] == pos_ind]
+    acc = (prediction[ind] == label_t[ind]).sum() / len(ind)
+    return acc
+
+# filter ICU stays based on LOS needed: 48+6, 4+6, 12+6
+def filter_los(static_data, vitals_data, thresh, gap):
+    # (200, 80)
+    los = [i.shape[1] for i in vitals_data]
+    ind = [i for i in range(len(los)) if los[i] >= (thresh + gap) and np.isnan(static_data[i, 0]) == False]
+    vitals_reduce = [vitals_data[i][:, :thresh] for i in ind]
+    static_data = static_data[ind]
+    return static_data, vitals_reduce
 
 
 
