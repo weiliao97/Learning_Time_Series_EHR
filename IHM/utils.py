@@ -3,8 +3,8 @@ import copy
 import os 
 import json 
 import importlib
-import IHM.loss_fn as loss_fn
-import IHM.models as models
+from IHM import models
+from IHM import loss_fn
 importlib.reload(models)
 importlib.reload(loss_fn)
 import torch

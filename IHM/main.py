@@ -3,15 +3,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 import argparse
-import json
-import os
 from tqdm import tqdm
 import importlib
-import IHM.models as models
-import IHM.prepare_data as prepare_data
-import IHM.make_optimizer as make_optimizer
-import IHM.utils as utils
-import IHM.loss_fn as loss_fn
+from IHM import models
+from IHM import prepare_data
+from IHM import make_optimizer
+from IHM import utils
+from IHM import loss_fn
 importlib.reload(models)
 importlib.reload(make_optimizer)
 importlib.reload(prepare_data)
