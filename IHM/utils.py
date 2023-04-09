@@ -1,22 +1,18 @@
-import torch
-from torch.autograd import Variable
-import torch.nn as nn
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 import numpy as np
-import sklearn.metrics as metrics
-from sklearn.metrics import roc_auc_score
-
-import importlib
-import IHM.loss_fn as loss_fn
-import IHM.models as models
-
-importlib.reload(models)
-importlib.reload(loss_fn)
 import copy
 import os 
 import json 
-
+import importlib
+import IHM.loss_fn as loss_fn
+import IHM.models as models
+importlib.reload(models)
+importlib.reload(loss_fn)
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+import sklearn.metrics as metrics
+from sklearn.metrics import roc_auc_score
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ce_loss = nn.CrossEntropyLoss()
 softmax = torch.nn.Softmax(dim=1)
 f_sm = nn.Softmax(dim=1)
@@ -304,7 +300,6 @@ def plot_roc(y_list, y_pred_list):
     plt.show()
     return fig
 
-
 # calculate acc
 def cal_acc(pred, label):
     '''
@@ -425,14 +420,6 @@ def get_cv_data(train_data, dev_data, train_target, dev_target, train_index, dev
     dev_cv = [trainval_head[i] for i in dev_index]
     dev_cvl = [trainval_static[i] for i in dev_index]
     return train_cv, dev_cv, np.asarray(train_cvl), np.asarray(dev_cvl)
-
-# calcuate accuracy
-def cal_acc(pred, label):
-    pred_t = torch.concat(pred)
-    prediction = torch.argmax(pred_t, dim=-1).unsqueeze(-1)
-    label_t = torch.concat(label)
-    acc = (prediction == label_t).sum() / len(pred_t)
-    return acc
 
 # calcualte accuracy for positive classes
 def cal_pos_acc(pred, label, pos_ind):

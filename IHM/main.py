@@ -31,12 +31,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parser for Tranformer models")
 
     parser.add_argument("--dataset_path", type=str, help="path to the dataset")
-    parser.add_argument("--model_name", type=str, default='TCN', choices=['Trans', 'TCN', 'RNN'])
+    parser.add_argument("--model_name", type=str, default='TCN', choices=['Transformer', 'TCN', 'LSTM'])
     parser.add_argument("--rnn_type", type=str, default='lstm', choices=['rnn', 'lstm', 'gru'])
-
-    # important, which target to use as the prediction taregt 0: hospital mortality, 1: ARF, 2: shock
-    parser.add_argument("--target_index", type=int, default=0, help="Which static column to target")
-    parser.add_argument("--output_classes", type=int, default=2, help="Which static column to target")
     parser.add_argument("--cal_pos_acc", action='store_false', default=True,
                         help="Whethe calculate the acc of the positive class")
     parser.add_argument("--filter_los", action='store_false', default=True,
@@ -70,14 +66,14 @@ if __name__ == "__main__":
     parser.add_argument('--warmup', action='store_true', default = False, help="whether use learning rate warm up")
     parser.add_argument('--lr_factor', type=int, default=0.1, help="warmup_learning rate factor")
     parser.add_argument('--lr_steps', type=int, default=2000, help="warmup_learning warm up steps")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")  # could be overwritten by warm up
+    parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")  # could be overwritten by warm up
     # loss compute, mean or last , output (16, 24, 2) for RNN and TCN
     parser.add_argument("--loss_rule", type=str, default='last', choices=['mean', 'last'])
 
     # Parse and return arguments
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    task_map = {0: 'hosp_mort', 1: 'ARF', 2: 'shock'}
+  
     # load data
     data_label = np.load(args.dataset_path, allow_pickle=True).item()
     train_head = data_label['train_head']
@@ -90,9 +86,7 @@ if __name__ == "__main__":
     s_dev = np.stack(static_dev_filter, axis=0)
     s_test = np.stack(static_test_filter, axis=0)
 
-    print('Running target %d, thresh %d, gap %d, model %s' % (args.target_index, args.thresh, args.gap, args.model_name))
-    workname = date + '_%s' % task_map[args.target_index] + '_%dh' % args.thresh + '_%sh' % args.gap + '_%s' % (args.model_name.lower())
-    print(workname)
+    workname = date + '_%dh' % args.thresh + '_%sh' % args.gap + '_%s' % (args.model_name.lower())
     args.checkpoint_model = workname
 
     print('Before filtering, train size is %d' % (len(train_head)))
@@ -117,7 +111,7 @@ if __name__ == "__main__":
         torch.save(model.state_dict(), '/content/start_weights.pt')
         print('Saving Initial Weights')
         print("Trainable params in TCN is %d" % utils.count_parameters(model))
-    elif args.model_name == 'RNN':
+    elif args.model_name == 'LSTM':
         model = models.RecurrentModel(cell=args.rnn_type, hidden_dim=args.hidden_dim,
                                       layer_dim=args.layer_dim, \
                                       output_dim=args.output_classes, dropout_prob=args.dropout,
