@@ -1,5 +1,6 @@
 # Learning_Time_Series_EHR
 
+(The repo to extract the data is in [METRE](https://github.com/weiliao97/METRE) and the repo to seperate sensitive latents and non-sensitive latents is in [TSVAE](https://github.com/weiliao97/TSVAE))
 (to be finished)
 ## 1. Extract data from MIMIC-IV an eICU using METRE 
 To extract data from MIMIV-IV and eICU databases, please follow the instructions in the [METRE](https://github.com/weiliao97/METRE) repository. To obtain the General cohort, please run:
