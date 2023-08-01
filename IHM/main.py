@@ -4,17 +4,10 @@ import torch.nn as nn
 import numpy as np
 import argparse
 from tqdm import tqdm
-import importlib
-from IHM import models
-from IHM import prepare_data
-from IHM import make_optimizer
-from IHM import utils
-from IHM import loss_fn
-importlib.reload(models)
-importlib.reload(make_optimizer)
-importlib.reload(prepare_data)
-importlib.reload(utils)
-importlib.reload(loss_fn)
+import models
+import prepare_data
+import make_optimizer
+import utils
 from sklearn.model_selection import KFold
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
@@ -24,6 +17,7 @@ today = date.today()
 date = today.strftime("%m%d")
 kf = KFold(n_splits=10, random_state=42, shuffle=True)
 f_sm = nn.Softmax(dim=1)
+conf_level = 0.95
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parser for Tranformer models")
@@ -37,6 +31,7 @@ if __name__ == "__main__":
                         help="Whether filter the first xxx hours of stay")
     parser.add_argument("--thresh", type=int, default=48, help="how many hours of data to use")
     parser.add_argument("--gap", type=int, default=6, help="gap hours between record stop and data used in training")
+    parser.add_argument("--output_classes", type=int, default=2, help="output classes")
 
     # model parameters
     # TCN
@@ -183,29 +178,24 @@ if __name__ == "__main__":
             # save the results in a dictionary and save that dictionary regularly
             roc = []
             prc = []
+            y_l = torch.concat(y_list).cpu().numpy()
+            y_pred_l = np.concatenate(
+                    [f_sm(y_pred_list[i]).cpu().numpy() for i in range(len(y_pred_list))])
             for i in tqdm(range(1000)):
                 test_index = np.random.choice(len(test_label), 1000)
-                test_i = [test_data[i] for i in test_index]
-                test_t = test_label[test_index]
-                test_dataloader = prepare_data.get_test_loader(args, test_i, test_t)
-                # test auroc on test set
-                y_list, y_pred_list, td_list, loss_te, val_acc = utils.get_evalacc_results(args, best_model,
-                                                                                           test_dataloader)
-                y_l = torch.concat(y_list).cpu().numpy()
-                y_pred_l = np.concatenate(
-                    [f_sm(y_pred_list[i]).cpu().numpy() for i in range(len(y_pred_list))])
-                # tpr, tnr = get_tp_tn(y_l.squeeze(-1), y_pred_l[:, 1])
-                test_roc = roc_auc_score(y_l.squeeze(-1), y_pred_l[:, 1])
-                test_prc = average_precision_score(y_l.squeeze(-1), y_pred_l[:, 1])
+                test_roc = roc_auc_score(y_l[test_index].squeeze(-1), y_pred_l[test_index][:, 1])
+                test_prc = average_precision_score(y_l[test_index].squeeze(-1), y_pred_l[test_index][:, 1])
                 roc.append(test_roc)
                 prc.append(test_prc)
             # create 95% confidence interval for population mean weight
             result_dict['fold%d'%c_fold] = ['%.3f' % np.mean(roc)]
             result_dict['fold%d'%c_fold].append(
-                '(%.3f-%.3f)' % st.t.interval(alpha=0.95, df=len(roc), loc=np.mean(roc), scale=np.std(roc)))
+                '(%.3f-%.3f)'%(np.percentile(roc, 100 * (1 - conf_level) / 2), 
+                                np.percentile(roc, 100 * (1 + conf_level) / 2)))
             result_dict['fold%d'%c_fold].append('%.3f' % np.mean(prc))
             result_dict['fold%d'%c_fold].append(
-                '(%.3f-%.3f)' % st.t.interval(alpha=0.95, df=len(prc), loc=np.mean(prc), scale=np.std(prc)))
+                '(%.3f-%.3f)'%(np.percentile(prc, 100 * (1 - conf_level) / 2), 
+                                np.percentile(prc, 100 * (1 + conf_level) / 2)))
             result_dict['fold%d'%c_fold].append(len(test_label))
 
     utils.write_json('./checkpoints', args.checkpoint_model + '.json', result_dict)

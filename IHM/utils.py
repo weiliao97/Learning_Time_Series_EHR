@@ -2,11 +2,8 @@ import numpy as np
 import copy
 import os 
 import json 
-import importlib
-from IHM import models
-from IHM import loss_fn
-importlib.reload(models)
-importlib.reload(loss_fn)
+import models
+import loss_fn
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
