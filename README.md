@@ -24,13 +24,26 @@ And
     python main.py --database eICU --project_id xxx --patient_group Sepsis_3
 
 
-## 2. Run preprocessing notebook
+## 2. Run preprocessing notebook 
 ## 3. Run prediction models 
+### 3.1 48h in-hospital mortality task
+In IHM folder, run
+
+    python main.py --model_name TCN --num_channels 256 256 256 256 --checkpoint test 
+### 3.2 SOFA score prediction 
+In SOFA folder: 
 > No fusion Transformer model
 
-        python main.py  --model_name Transformer
-> Fusion at I, V, VI
+    python main.py  --model_name Transformer --checkpoint test
 
-    python main.py  --static_fusion all --checkpoint test --num_channels 256 256 256 256 --s_param 256 256 256 0.2 --c_param 256 256 0.2 --sc_param 256 256 256 0.2
+or 
+
+    python main.py --model_name TCN --num_channels 256 256 256 256 --checkpoint test 
+> Fusion at I, V and VI 
+
+    python main.py  --static_fusion all --num_channels 256 256 256 256 --s_param 256 256 256 0.2 --c_param 256 256 0.2 --sc_param 256 256 256 0.2 --checkpoint test
+> With regularization l1 or l2 
+
+    python main.py --static_fusion inside --num_channels 256 256 256 256 --s_param 256 256 256 0.2 --c_param 256 256 0.2 --sc_param 256 256 256 0.2 --regularization l1 --checkpoint test 
    
-   ## 4. Run static info prediction models
+## 4. Run static info prediction models
