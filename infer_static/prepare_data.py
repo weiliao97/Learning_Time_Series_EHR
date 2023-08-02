@@ -390,10 +390,10 @@ def get_data_loader(args, train_head, dev_head, test_head, \
         bucket_boundaries = generate_buckets(args, args.bucket_size, train_hist)
         # train hist 0 is [0, 1) which is zero, train hist[-1] is [217, 218) which is also 0, not interated in generate_buckets func
         # val_bucket_boundaries = [k for k in range(1, 218) if k not in [129, 168, 188, 201, 206]]
-        if args.target_index == 1:
+        if args.infer_ind == 1:
             # ne need to resample if using age as a target
             sampler = EvalSampler(train_head, train_sofa_tail, bucket_boundaries, batch_sizes)
-        elif args.target_index == 21:
+        elif args.infer_ind == 2:
             # if race as the target 
             print(len(train_head))
             sampler = RaceTrainSampler(args, train_head, train_sofa_tail, bucket_boundaries, batch_sizes)
