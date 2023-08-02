@@ -38,11 +38,10 @@ if __name__ == "__main__":
     parser.add_argument('--sc_param', nargs='+', help='Fusion VI params', type=float)
    
     # regularization 
-    parser.add_argument("--regularization", type=str, default = "none", choices = ['none', 'l1' 'l2'])
+    parser.add_argument("--regularization", type=str, default = "none", choices = ['none', 'l1', 'l2'])
     parser.add_argument("--l1_strength", type=float, default=0.001, help="L1 regularization lambda")
     parser.add_argument("--l2_strength", type=float, default=0.0001, help="L2 regularization lambda")
    
-
     # model parameters
     # TCN
     parser.add_argument("--kernel_size", type=int, default=3, help="Dimension of the model")
@@ -143,7 +142,7 @@ if __name__ == "__main__":
                                             c_param=c_param_p)
 
     elif args.static_fusion == 'late':
-        model = models.TemporalConvStaticL(num_inputs=input_dim + static_dim, num_channels=args.num_channels, \
+        model = models.TemporalConvStaticL(num_inputs=input_dim, num_channels=args.num_channels, \
                                             num_static=static_dim, kernel_size=args.kernel_size, dropout=args.dropout,
                                             c_param=c_param_p, sc_param=sc_param_p)
     elif args.static_fusion == 'all':
@@ -152,11 +151,13 @@ if __name__ == "__main__":
                                             s_param = s_param_p, c_param=c_param_p, sc_param=sc_param_p)
 
 
-    else:  # inside
+    elif args.static_fusion == 'inside':  
         model = models.TemporalConvStaticI(num_inputs=input_dim + static_dim, num_channels=args.num_channels, num_static=static_dim,
                                             kernel_size=args.kernel_size, dropout=args.dropout, 
                                             s_param = s_param_p, c_param=c_param_p, sc_param=sc_param_p)
-
+    
+    else: 
+        raise ValueError('Please specify a valid static fusion method')
 
     print('Model trainable parameters are: %d' % utils.count_parameters(model))
     torch.save(model.state_dict(), '/content/start_weights.pt')
