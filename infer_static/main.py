@@ -122,7 +122,7 @@ if __name__ == "__main__":
                             allow_pickle=True).item()
     # gender, age, race #
     target_index = [0, 1, 21] + [i for i in range(4, 21)]
-    target_name = ['Gender', 'Age', 'Ethnicity', 'MI', 'CHF',
+    target_name = ['Sex', 'Age', 'Race', 'MI', 'CHF',
         'PVD', 'CBVD', 'Dementia', 'CPD', 'RD',
         'PUD', 'MLD', 'Diabetes_wo_cc',
         'Diabetes_cc', 'Paraplegia', 'Renal', 'Mal_cancer',
@@ -131,7 +131,7 @@ if __name__ == "__main__":
    
     true_ind = target_index[args.infer_ind]
     args.bucket_size = bucket_sizes[args.infer_ind]
-    workname = date + '_' + args.database + '_' + args.model_name + '_' + target_name[true_ind]
+    workname = date + '_' + args.database + '_' + args.model_name + '_' + target_name[args.infer_ind]
     utils.creat_checkpoint_folder('./checkpoints/' + workname, 'params.json', vars(args))
     train_head, train_sofa, train_id, train_target =  utils.crop_data_target(train_vital, mimic_target, mimic_static, 'train', true_ind)
     dev_head, dev_sofa, dev_id, dev_target =  utils.crop_data_target(dev_vital , mimic_target, mimic_static, 'dev', true_ind)
@@ -301,7 +301,7 @@ if __name__ == "__main__":
         fig = utils.plot_confusion_matrix(y_list, y_pred_list,
                                         # label_x = ['Pred-White', 'Pred-Black\nAfrican American'], label_y = ['White', 'Black/African\nAmerican'], \
                                         #   label_x = ['Pred-Female', 'Pred-Male'], label_y = ['Female', 'Male'], \
-                                    title='%s Prediction'%target_name[true_ind])
+                                    title='%s Prediction'%target_name[args.infer_ind])
         fig.savefig('./checkpoints/' + workname + '/cm_maps/' + '%s.eps'%wname, format='eps', bbox_inches = 'tight', pad_inches = 0.1, dpi=1200)
         pred = sm(torch.concat(y_pred_list))[:, 1].cpu().numpy()
         fpr, tpr, thresholds = metrics.roc_curve(torch.concat(y_list).detach().cpu().numpy(),\
@@ -335,7 +335,7 @@ if __name__ == "__main__":
         fig = utils.plot_confusion_matrix(y_list, y_pred_list,
                                         # label_x = ['Pred-White', 'Pred-Black\nAfrican American'], label_y = ['White', 'Black/African\nAmerican'], \
                                         #   label_x = ['Pred-', 'Pred-Male'], label_y = ['Female', 'Male'], \
-                                    title='%s Prediction'%target_name[true_ind])
+                                    title='%s Prediction'%target_name[args.inder_ind])
         fig.savefig('./checkpoints/' + workname + '/cm_maps_cv/' + '%s.eps'%wname, format='eps', bbox_inches = 'tight', pad_inches = 0.1, dpi=1200)
         pred = sm(torch.concat(y_pred_list))[:, 1].cpu().numpy()
         fpr, tpr, thresholds = metrics.roc_curve(torch.concat(y_list).detach().cpu().numpy(),\
