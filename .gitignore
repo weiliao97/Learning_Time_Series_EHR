@@ -4,7 +4,7 @@ __pycache__/models.cpython-39.pyc
 __pycache__/prepare_data.cpython-39.pyc
 __pycache__/utils.cpython-39.pyc
 checkpoints/0404_mimic_TCNmed_fusion_test/fold0_best_loss.pt
-checkpoints
+checkpoints/
 IHM/checkpoints/
 IHM/__pycache__/
 SOFA/checkpoints/
