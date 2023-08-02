@@ -209,10 +209,7 @@ if __name__ == "__main__":
 
             for vitals, target, key_mask in train_dataloader:
                 # print(label.shape)
-                if args.warmup == True:
-                    model_opt.optimizer.zero_grad()
-                else:
-                    model_opt.zero_grad()
+                model_opt.zero_grad()
                 # ti_data = Variable(ti.float().to(device))
                 td_data = vitals.to(device) # (6, 182, 24)
                 sofa = target.to(device) #(6, )
