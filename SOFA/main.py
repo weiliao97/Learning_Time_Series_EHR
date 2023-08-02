@@ -113,9 +113,10 @@ if __name__ == "__main__":
     input_dim =train_head[0].shape[0]
     static_dim = train_static[0].shape[0]
 
-    s_param_p = [int(i) if i > 1.0 else i for i in args.s_param]
-    c_param_p = [int(i) if i > 1.0 else i for i in args.c_param]
-    sc_param_p = [int(i) if i > 1.0 else i for i in args.sc_param]
+    if args.static_fusion != 'no_static':
+        s_param_p = [int(i) if i > 1.0 else i for i in args.s_param]
+        c_param_p = [int(i) if i > 1.0 else i for i in args.c_param]
+        sc_param_p = [int(i) if i > 1.0 else i for i in args.sc_param]
 
     if args.static_fusion == 'no_static':
 
@@ -238,7 +239,7 @@ if __name__ == "__main__":
                         sofa_p = model(td_transpose, x_lengths)
                     elif args.model_name == 'Transformer':
                         tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                        sofa_p = model(vitals.to(device), tgt_mask, key_mask.to(device))
+                        sofa_p = model(vitals.to(device), tgt_mask, key_mask.bool().to(device))
                 else:
                     sofa_p = model(vitals.to(device), static.to(device))
 
@@ -265,7 +266,6 @@ if __name__ == "__main__":
             with torch.no_grad():  # validation does not require gradient
 
                 for vitals, static, target, val_ids, key_mask in dev_dataloader:
-                   
                     if args.static_fusion == 'no_static':
                         if args.model_name == 'TCN':
                             sofap_t = model(vitals.to(device))
@@ -276,7 +276,7 @@ if __name__ == "__main__":
                             sofap_t = model(td_transpose, x_lengths)
                         elif args.model_name == 'Transformer':
                             tgt_mask = model.get_tgt_mask(vitals.to(device).shape[-1]).to(device)
-                            sofap_t = model(vitals.to(device), tgt_mask, key_mask.to(device))
+                            sofap_t = model(vitals.to(device), tgt_mask, key_mask.bool().to(device))
                     else:
                          sofap_t = model(vitals.to(device), static.to(device))
                     loss_v = utils.mse_maskloss(sofap_t, target.to(device), key_mask.to(device))
