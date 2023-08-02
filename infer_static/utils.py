@@ -1,36 +1,57 @@
+import os 
+import json 
 import torch 
 from torch.autograd import Variable
 import numpy as np 
 import pandas as pd 
 import torch.nn as nn
-import importlib
 import loss_fn
 import models
-importlib.reload(models)
-importlib.reload(loss_fn)
 import sklearn.metrics as metrics
+# plot cm matrix 
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams["figure.dpi"] = 100
-
-importlib.reload(loss_fn)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ce_loss = nn.CrossEntropyLoss()
-softmax = torch.nn.Softmax(dim=1) 
-# plot cm matrix 
-import sklearn.metrics as metrics 
 import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib 
-matplotlib.rcParams["figure.dpi"] = 300
 plt.style.use('bmh')
 plt.rcParams["font.weight"] = "bold"
 plt.rcParams["axes.labelweight"] = "bold"
 legend_properties = {'weight':'bold', 'size': 6}
-### Complete your code here to plot your confusion matrix for both models 
-### you may find sklearn.metrics.confusion_matrix helpful 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+ce_loss = nn.CrossEntropyLoss()
+softmax = torch.nn.Softmax(dim=1) 
+
+def creat_checkpoint_folder(target_path, target_file, data):
+    """
+    Create a folder to save the checkpoint
+    input: target_path,
+           target_file,
+           data
+    output: None
+    """
+    if not os.path.exists(target_path):
+        try:
+            os.makedirs(target_path)
+            os.makedirs(target_path + '/auc_plots')
+            os.makedirs(target_path + '/auc_plots_cv')
+            os.makedirs(target_path + '/cm_maps')
+            os.makedirs(target_path + '/cm_maps_cv')
+        except Exception as e:
+            print(e)
+            raise
+    with open(os.path.join(target_path, target_file), 'w') as f:
+        json.dump(data, f)
 
 def plot_confusion_matrix(y_list, y_pred_list, title='Confusion matrix', label_x=None, label_y=None):
+    """
+    Plot confusion matrix
+    input: y_list: list of true labels
+           y_pred_list: list of predicted labels
+           title: title of the plot
+           label_x: x label of the plot
+           label_y: y label of the plot
+    output: fig: figure of the plot
+    """
     num_class = y_pred_list[0].shape[-1]
     y_label = torch.concat(y_list).detach().cpu().numpy()
     pred_t = torch.concat(y_pred_list)
@@ -480,6 +501,7 @@ def cal_pos_acc(pred, label, pos_ind):
     ind = [i for i in range(len(pred_t)) if label_t[i] == pos_ind]
     acc = (prediction[ind] == label_t[ind]).sum()/len(ind)
     return acc
+
 
 
 
