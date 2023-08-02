@@ -47,3 +47,10 @@ or
     python main.py --static_fusion inside --num_channels 256 256 256 256 --s_param 256 256 256 0.2 --c_param 256 256 0.2 --sc_param 256 256 256 0.2 --regularization l1 --checkpoint test 
    
 ## 4. Run static info prediction models
+In infer_static folder, have the model pt file ready for feature extraction.
+> TCN model with channels [256, 256, 256, 256], sepsis_3 cohort, SOFA prediction and infer race (index: 2):
+
+    python main.py --model_path xxx --model_name TCN --num_channel 256 256 256 256 --task_name sofa --read_channels 128 --infer_ind 
+2
+
+
