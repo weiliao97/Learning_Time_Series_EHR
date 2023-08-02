@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--input_dim", type = int, default= 200, help="Dimension of variables used to train the extarction model")
     parser.add_argument("--bucket_size", type=int, default=300, help="path to the dataset")
     # TCN
-    parser.add_argument('--num_channels', nargs='+', help='num of channels in TCN')
+    parser.add_argument('--num_channels', nargs='+', type = int, help='num of channels in TCN')
     parser.add_argument("--kernel_size", type=int, default=3, help="Dimension of the model")
     parser.add_argument("--dropout", type=float, default=0.2, help="Model dropout")
     parser.add_argument("--reluslope", type=float, default=0.1, help="Relu slope in the fc model")
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     ## FC read model parameters
     parser.add_argument("--read_drop", type=float, default=0.2, help="Model dropout in FC read model")
     parser.add_argument("--read_reluslope", type=float, default=0.1, help="Relu slope in the FC read model")
-    parser.add_argument("--read_channels", nargs='+', help='num of channels in FC read model')
+    parser.add_argument("--read_channels", nargs='+', type = int, help='num of channels in FC read model')
     parser.add_argument("--output_classes", type=int, default=2, help="Which static column to target")
     parser.add_argument("--infer_ind", type=int, default=1, help="Which static column to target")
     parser.add_argument("--cal_pos_acc", action = 'store_false', default=True, help="Whethe calculate the acc of the positive class")
