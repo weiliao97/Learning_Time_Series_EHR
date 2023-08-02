@@ -9,3 +9,5 @@ IHM/checkpoints/
 IHM/__pycache__/
 SOFA/checkpoints/
 SOFA/__pycache__/
+infer_static/checkpoints/
+infer_static/__pycache__/
