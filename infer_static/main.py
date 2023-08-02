@@ -131,7 +131,7 @@ if __name__ == "__main__":
    
     true_ind = target_index[args.infer_ind]
     args.bucket_size = bucket_sizes[args.infer_ind]
-    workname = date + '_' + args.database + '_' + args.model_name + '_'  + args.read_model + '_' + target_name[true_ind]
+    workname = date + '_' + args.database + '_' + args.model_name + '_' + target_name[true_ind]
     utils.creat_checkpoint_folder('./checkpoints/' + workname, 'params.json', vars(args))
     train_head, train_sofa, train_id, train_target =  utils.crop_data_target(train_vital, mimic_target, mimic_static, 'train', true_ind)
     dev_head, dev_sofa, dev_id, dev_target =  utils.crop_data_target(dev_vital , mimic_target, mimic_static, 'dev', true_ind)
