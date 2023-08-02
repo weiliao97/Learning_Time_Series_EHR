@@ -6,13 +6,9 @@ import argparse
 from datetime import date
 today = date.today()
 date = today.strftime("%m%d")
-import importlib
-import SOFA.models as models
-import SOFA.prepare_data as prepare_data
-import SOFA.utils as utils
-importlib.reload(models)
-importlib.reload(prepare_data)
-importlib.reload(utils)
+import models
+import prepare_data
+import utils
 from sklearn.model_selection import KFold
 kf = KFold(n_splits=10, random_state=None, shuffle=False)
 mse_loss = nn.MSELoss()
@@ -210,7 +206,7 @@ if __name__ == "__main__":
                                                                                             train_stail, val_stail,
                                                                                             test_sofa,
                                                                                             train_static=train_static,
-                                                                                            dev_static=dev_static,
+                                                                                            dev_static=val_static,
                                                                                             test_static=test_static,
                                                                                             train_id=train_id,
                                                                                             dev_id=val_id,
