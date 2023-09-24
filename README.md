@@ -1,6 +1,6 @@
 # Learning_Time_Series_EHR
 
-(The repo to extract the data is in [METRE](https://github.com/weiliao97/METRE) and the repo to seperate sensitive latents and non-sensitive latents is in [TSVAE](https://github.com/weiliao97/TSVAE))
+(The repo to extract the data is in [METRE](https://github.com/weiliao97/METRE) and the repo to seperate sensitive latents and non-sensitive latents is in [TIMESPAN](https://github.com/weiliao97/TIMESPAN))
 
 (to be finished)
 
